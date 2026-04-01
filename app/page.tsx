@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
+export const runtime = 'edge'
+
 async function signOut() {
   'use server'
   const supabase = await createClient()
