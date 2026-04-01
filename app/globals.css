@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0f1117;
+  --color-surface: #1a1d2e;
+  --color-border: #2a2d3e;
+  --color-primary: #6c63ff;
+  --color-secondary: #00d4aa;
+  --color-text: #e2e8f0;
+  --color-muted: #64748b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+@layer components {
+  .card {
+    @apply bg-[#1a1d2e] border border-[#2a2d3e] rounded-2xl p-6;
+  }
+
+  .btn-primary {
+    @apply bg-[#6c63ff] hover:bg-[#5a52d5] text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 active:scale-95;
+  }
+
+  .btn-outline {
+    @apply border border-[#2a2d3e] hover:border-[#6c63ff] hover:bg-[#6c63ff]/10 text-[#e2e8f0] font-medium py-3 px-6 rounded-xl transition-all duration-200 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-white/5 text-[#e2e8f0] font-medium py-2 px-4 rounded-lg transition-all duration-200;
+  }
+
+  .likert-btn {
+    @apply w-12 h-12 rounded-xl border-2 border-[#2a2d3e] font-semibold text-sm transition-all duration-200 cursor-pointer hover:border-[#6c63ff] hover:bg-[#6c63ff]/10;
+  }
+
+  .likert-btn-active {
+    @apply bg-[#6c63ff] border-[#6c63ff] text-white shadow-lg shadow-[#6c63ff]/30 scale-105;
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 40px rgba(108, 99, 255, 0.15);
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-[#6c63ff] to-[#00d4aa] bg-clip-text text-transparent;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* Progress bar animation */
+@keyframes progress-fill {
+  from { width: 0%; }
+}
+
+.progress-fill {
+  animation: progress-fill 0.8s ease-out;
+}
+
+/* Feedback animations */
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pop-in {
+  animation: popIn 0.3s ease-out;
+}
+
+/* Tailwind arbitrary animations — keyframes must also live here */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.95); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
