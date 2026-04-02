@@ -16,6 +16,16 @@ export default async function HomePage() {
 
   if (!user) redirect('/auth/login')
 
+  const { data: consent } = await supabase
+    .from('consentimientos')
+    .select('id_consentimiento')
+    .eq('id_usuario', user.id)
+    .single()
+
+  if (!consent) {
+    redirect('/consentimiento')
+  }
+
   const name = user.user_metadata?.full_name ?? user.email ?? 'Investigador'
   const avatar = user.user_metadata?.avatar_url
   const firstName = name.split(' ')[0]
@@ -153,10 +163,38 @@ export default async function HomePage() {
           ))}
         </div>
 
+        {/* Dashboards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 animate-[slideUp_0.8s_ease-out]">
+          <a href="/mis-resultados" className="group p-5 rounded-2xl border border-[#2a2d3e] bg-[#1a1d2e] hover:bg-[#1e2136] transition-colors shadow-sm cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#6c63ff]/10 flex items-center justify-center text-xl border border-[#6c63ff]/20">📊</div>
+              <div className="text-left flex-1">
+                <h3 className="font-semibold text-[#e2e8f0] group-hover:text-[#6c63ff] transition-colors text-lg">Mis Resultados</h3>
+                <p className="text-[#64748b] text-sm">Consulta tu historial y progreso.</p>
+              </div>
+              <svg className="h-5 w-5 text-[#64748b] group-hover:text-[#6c63ff] transform transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </a>
+
+          <a href="/admin" className="group p-5 rounded-2xl border border-[#2a2d3e] bg-[#1a1d2e] hover:bg-[#1e2136] transition-colors shadow-sm cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#ef4444]/10 flex items-center justify-center text-xl border border-[#ef4444]/20">🛡️</div>
+              <div className="text-left flex-1">
+                <h3 className="font-semibold text-[#e2e8f0] group-hover:text-[#ef4444] transition-colors text-lg">Panel Investigador</h3>
+                <p className="text-[#64748b] text-sm">Métricas de todos los estudiantes.</p>
+              </div>
+              <svg className="h-5 w-5 text-[#64748b] group-hover:text-[#ef4444] transform transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </a>
+        </div>
+
         {/* Footer note */}
-        <p className="text-center text-[#64748b] text-xs mt-12">
-          Herramientas validadas científicamente · Datos tratados con confidencialidad
-        </p>
+        <div className="text-center text-[#64748b] text-xs mt-12 space-y-2 border-t border-[#2a2d3e] pt-6">
+          <p>Herramientas validadas científicamente · Datos tratados con confidencialidad para fines investigativos</p>
+          <p className="max-w-2xl mx-auto opacity-70">
+            Basado en: Garzón Umerenkova, A., de la Fuente, J., Martínez-Vicente, J., Zapata Sevillano, L., Pichardo M. y García-Berbén, A.B. (2017). Validation of the Spanish Short Self-Regulation Questionnaire (SSSRQ) through Rasch Analysis. Frontiers in Psychology, 8: 276. doi: 10.3389/fpsyg.2017.00276
+          </p>
+        </div>
       </main>
     </div>
   )

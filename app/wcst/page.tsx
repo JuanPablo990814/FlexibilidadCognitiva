@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import WCSTCard, { type Carta, type Color, type Forma } from '@/components/WCSTCard'
+import { saveWcstResult } from './actions'
 
 // ─────────────────────────────────────────────
 // Configuración del WCST
@@ -100,6 +101,7 @@ export default function WCSTPage() {
   const [feedback, setFeedback] = useState<FeedbackState>(null)
   const [feedbackIdx, setFeedbackIdx] = useState<number | null>(null)
   const [bloqueado, setBloqueado] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   // Ref que guarda los valores de juego mutables para que el setTimeout
   // siempre lea los valores más recientes (evita stale closure)
@@ -205,29 +207,28 @@ export default function WCSTPage() {
     setReglaActual(nuevaRegla)
     setReglaAnterior(nuevaReglaAnterior)
 
-    setMetricas(prev => {
-      const nuevoHistorial = [...prev.historial, {
+    const nuevasMetricas = {
+      ...metricas,
+      totalEnsayos: metricas.totalEnsayos + 1,
+      totalAciertos: correcto ? metricas.totalAciertos + 1 : metricas.totalAciertos,
+      totalErrores: !correcto ? metricas.totalErrores + 1 : metricas.totalErrores,
+      erroresPersonerativos: esPersonerativo ? metricas.erroresPersonerativos + 1 : metricas.erroresPersonerativos,
+      erroresNoPersonerativos: (!correcto && !esPersonerativo) ? metricas.erroresNoPersonerativos + 1 : metricas.erroresNoPersonerativos,
+      fallosAlMantener: falloMantenimiento ? metricas.fallosAlMantener + 1 : metricas.fallosAlMantener,
+      categoriasCompletadas: nuevasCategorias,
+      ensayosHasta1raCategoria: (nuevasCategorias > j.categoriasCompletadas)
+        ? (metricas.ensayosHasta1raCategoria ?? metricas.totalEnsayos + 1)
+        : metricas.ensayosHasta1raCategoria,
+      historial: [...metricas.historial, {
         cartaIdx: j.ensayoActual,
         estimuloElegidoIdx: estimuloIdx,
         correcto,
         regla: j.reglaActual,
         esPersonerativo,
       }]
-      return {
-        ...prev,
-        totalEnsayos: prev.totalEnsayos + 1,
-        totalAciertos: correcto ? prev.totalAciertos + 1 : prev.totalAciertos,
-        totalErrores: !correcto ? prev.totalErrores + 1 : prev.totalErrores,
-        erroresPersonerativos: esPersonerativo ? prev.erroresPersonerativos + 1 : prev.erroresPersonerativos,
-        erroresNoPersonerativos: (!correcto && !esPersonerativo) ? prev.erroresNoPersonerativos + 1 : prev.erroresNoPersonerativos,
-        fallosAlMantener: falloMantenimiento ? prev.fallosAlMantener + 1 : prev.fallosAlMantener,
-        categoriasCompletadas: nuevasCategorias,
-        ensayosHasta1raCategoria: (nuevasCategorias > j.categoriasCompletadas)
-          ? (prev.ensayosHasta1raCategoria ?? prev.totalEnsayos + 1)
-          : prev.ensayosHasta1raCategoria,
-        historial: nuevoHistorial,
-      }
-    })
+    }
+
+    setMetricas(nuevasMetricas)
 
     // El setTimeout lee del ref, nunca del closure → valores siempre frescos
     setTimeout(() => {
@@ -239,12 +240,20 @@ export default function WCSTPage() {
       const cats = juegoRef.current.categoriasCompletadas
       if (nextEnsayo >= TOTAL_CARTAS || cats >= MAX_CATEGORIAS) {
         setStep('done')
-        setTimeout(() => setStep('results'), 1200)
+        
+        startTransition(async () => {
+          const dbResponse = await saveWcstResult(nuevasMetricas)
+          if (dbResponse?.error) {
+             console.error("Error WCST DB:", dbResponse.error)
+          }
+          setTimeout(() => setStep('results'), 1200)
+        })
+
       } else {
         setEnsayoActual(nextEnsayo)
       }
     }, 900)
-  }, [bloqueado, cartaActual])
+  }, [bloqueado, cartaActual, metricas])
 
   const progreso = baraja.length > 0 ? (ensayoActual / TOTAL_CARTAS) * 100 : 0
   const pctAciertos = metricas.totalEnsayos > 0 ? Math.round((metricas.totalAciertos / metricas.totalEnsayos) * 100) : 0
@@ -422,7 +431,9 @@ export default function WCSTPage() {
           <div className="flex flex-col items-center justify-center min-h-[60vh] animate-[fadeIn_0.5s_ease-out]">
             <div className="text-6xl mb-4">🎉</div>
             <h2 className="text-2xl font-bold text-[#e2e8f0] mb-2">Test completado</h2>
-            <p className="text-[#64748b]">Calculando resultados...</p>
+            <p className="text-[#64748b]">
+              {isPending ? 'Guardando métricas en la nube...' : 'Calculando resultados...'}
+            </p>
           </div>
         )}
 

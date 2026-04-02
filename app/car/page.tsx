@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { saveCarResult } from './actions'
 
 // ─────────────────────────────────────────────
 // Configuración del CAR
@@ -128,6 +129,8 @@ export default function CARPage() {
     setShowError(false)
   }
 
+  const [isPending, startTransition] = useTransition()
+
   const handleSubmit = () => {
     if (Object.keys(respuestas).length < 17) {
       setShowError(true)
@@ -139,8 +142,16 @@ export default function CARPage() {
     }
     const r = calcularCAR(respuestas)
     setResultado(r)
-    setStep('results')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+
+    startTransition(async () => {
+      const dbResponse = await saveCarResult(r)
+      if (dbResponse?.error) {
+        alert(dbResponse.error)
+      } else {
+        setStep('results')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    })
   }
 
   const handleReiniciar = () => {
@@ -334,9 +345,10 @@ export default function CARPage() {
               )}
               <button
                 onClick={handleSubmit}
-                className="btn-primary w-full text-base py-4 shadow-2xl shadow-[#6c63ff]/20"
+                disabled={isPending}
+                className="btn-primary w-full text-base py-4 shadow-2xl shadow-[#6c63ff]/20 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
               >
-                Ver mis resultados →
+                {isPending ? 'Guardando en la base de datos...' : 'Ver mis resultados →'}
               </button>
             </div>
           </div>
@@ -415,7 +427,7 @@ export default function CARPage() {
             <div className="p-4 rounded-xl bg-[#1a1d2e] border border-[#2a2d3e] mb-8 text-xs text-[#64748b]">
               <strong className="text-[#e2e8f0]">Nota:</strong> Puntuaciones más altas indican mayor autorregulación. 
               Para interpretaciones normativas se recomienda comparar con medias de una muestra de referencia. 
-              <span className="italic"> Pichardo et al. (2014); Garzón Umerenkova et al. (2017).</span>
+              <br/><span className="italic mt-2 inline-block">Cuestionario basado en: Garzón Umerenkova, A., de la Fuente, J., Martínez-Vicente, J., Zapata Sevillano, L., Pichardo M. y García-Berbén, A.B. (2017). Validation of the Spanish Short Self-Regulation Questionnaire (SSSRQ) through Rasch Analysis. Frontiers in Psychology, 8: 276. doi: 10.3389/fpsyg.2017.00276</span>
             </div>
 
             {/* Acciones */}
