@@ -9,14 +9,11 @@ export default async function CarLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect('/auth/login')
 
-  const { data: consent } = await supabase
-    .from('consentimientos')
-    .select('id_consentimiento')
-    .eq('id_usuario', user.id)
-    .single()
+  const { cookies } = await import('next/headers')
+  const activeStudentId = cookies().get('active_student_id')?.value
 
-  if (!consent) {
-    redirect('/consentimiento')
+  if (!activeStudentId) {
+    redirect('/')
   }
 
   return children
