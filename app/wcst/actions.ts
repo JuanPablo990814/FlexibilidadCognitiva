@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 
 interface MetricasWCST {
   totalEnsayos: number
@@ -19,8 +20,11 @@ export async function saveWcstResult(metricas: MetricasWCST) {
 
   if (!user) throw new Error('Usuario no autenticado')
 
+  const activeStudentId = cookies().get('active_student_id')?.value
+
   const payload = {
-    id_usuario: user.id,
+    id_usuario: user.id, // ID del profesor
+    id_consentimiento: activeStudentId || null, // ID del alumno
     total_ensayos: metricas.totalEnsayos,
     total_aciertos: metricas.totalAciertos,
     total_errores: metricas.totalErrores,
@@ -28,7 +32,8 @@ export async function saveWcstResult(metricas: MetricasWCST) {
     errores_perseverativos: metricas.erroresPersonerativos,
     errores_no_perseverativos: metricas.erroresNoPersonerativos,
     fallos_al_mantener: metricas.fallosAlMantener,
-    ensayos_hasta_1ra_categoria: metricas.ensayosHasta1raCategoria
+    ensayos_hasta_1ra_categoria: metricas.ensayosHasta1raCategoria,
+    historial: (metricas as any).historial
   }
 
   const { error } = await supabase.from('resultados_wcst').insert([payload])

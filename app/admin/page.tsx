@@ -1,151 +1,222 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import ExportExcelButton from '@/components/ExportExcelButton'
+import { interpretarPuntuacion } from '@/lib/normativasWCST'
+import { isAdmin } from '@/lib/authUtils'
 
 export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect('/auth/login')
-
-  // Nota: Si el usuario ve esta página vacía o lanza un error de Row Level Security, 
-  // es porque NO se ha corrido el script SQL setup_admin_db.sql que autoriza su email
-  // o su correo no es el correo de administador.
   
-  // Buscar a los estudiantes en "consentimientos" (ya que ahí están sus nombres reales)
-  const { data: estudiantes, error: errorConsent } = await supabase
-    .from('consentimientos')
-    .select('*')
+  if (!isAdmin(user.email)) {
+    redirect('/')
+  }
 
-  // Buscar todos los resultados CAR
-  const { data: resultadosCAR, error: errorResult } = await supabase
-    .from('resultados_autorregulacion')
-    .select('*')
-    .order('fecha_evaluacion', { ascending: false })
+  // Obtener datos
+  const { data: estudiantes } = await supabase.from('consentimientos').select('*')
+  const { data: resultadosWCST } = await supabase.from('resultados_wcst').select('*').order('fecha_evaluacion', { ascending: false })
 
-  // Buscar todos los resultados WCST
-  const { data: resultadosWCST, error: errorWcst } = await supabase
-    .from('resultados_wcst')
-    .select('*')
-    .order('fecha_evaluacion', { ascending: false })
+  const esAdmin = estudiantes !== null
 
-  const esAdmin = !errorConsent && !errorResult && !errorWcst && estudiantes !== null
+  // Preparar datos para exportación masiva con detalle de los 64 ensayos
+  const dataForExcel = (estudiantes || []).map(est => {
+    const res = resultadosWCST?.find(r => r.id_consentimiento === est.id_consentimiento)
+    
+    // Objeto base con datos generales
+    const row: any = {
+      Estudiante: est.nombre_estudiante,
+      Grado: `${est.grado_estudiante} - ${est.grupo_estudiante}`,
+      Categorias: res?.categorias_completadas || 0,
+      Total_Aciertos: res?.total_aciertos || 0,
+      Errores_Perseverativos: res?.errores_perseverativos || 0,
+      Errores_No_Perseverativos: res?.errores_no_perseverativos || 0,
+      Fallos_Mantenimiento: res?.fallos_al_mantener || 0,
+      Sello_Fecha: res ? new Date(res.fecha_evaluacion).toLocaleString() : 'Pendiente'
+    }
+
+    if (res && est.edad_estudiante) {
+      const interpCat = interpretarPuntuacion(res.categorias_completadas, est.edad_estudiante, 'categorias')
+      const interpErr = interpretarPuntuacion(res.errores_perseverativos, est.edad_estudiante, 'errores_perseverativos')
+      
+      row['Edad'] = est.edad_estudiante
+      row['Interp_Categorías'] = interpCat.interpretacion
+      row['Conclusión_Categorías'] = interpCat.conclusion
+      row['Explicación_Categorías'] = interpCat.explicacionSimple
+      row['Rango_Normal_Categorías'] = interpCat.rangoNormal
+      
+      row['Interp_Errores'] = interpErr.interpretacion
+      row['Conclusión_Errores'] = interpErr.conclusion
+      row['Explicación_Errores'] = interpErr.explicacionSimple
+      row['Rango_Normal_Errores'] = interpErr.rangoNormal
+    }
+
+    // Añadir 64 columnas para los 64 ensayos (E1, E2, ... E64)
+    if (res?.historial && Array.isArray(res.historial)) {
+      res.historial.forEach((h: any, i: number) => {
+        let status = 'Error'
+        if (h.correcto) status = 'Acierto'
+        if (h.esPersonerativo) status = 'E. Perseverativo'
+        
+        row[`Ensayo_${i + 1}_Regla_${h.regla}`] = status
+      })
+    } else if (res) {
+       // Si el test se hizo antes de activar el historial, llenar con '-'
+       for(let i=1; i<=64; i++) row[`Ensayo_${i}`] = 'Sin historial (Test Antiguo)'
+    }
+
+    return row
+  })
 
   return (
     <div className="min-h-screen py-10 px-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 animate-[slideUp_0.4s_ease-out]">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 gap-6 animate-[slideUp_0.4s_ease-out]">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="bg-[#ef4444]/20 text-[#ef4444] px-2 py-1 rounded text-xs font-bold uppercase border border-[#ef4444]/40">Acceso Restringido</span>
-              <span className="text-[#64748b] text-sm">Panel de Investigador</span>
+              <span className="bg-[#00d4aa]/20 text-[#00d4aa] px-2 py-1 rounded text-[10px] font-bold uppercase border border-[#00d4aa]/40">Módulo Administrativo</span>
+              <span className="text-[#64748b] text-xs">Análisis de Flexibilidad y Funciones Ejecutivas</span>
             </div>
-            <h1 className="text-3xl font-bold gradient-text">Dashboard Analítico</h1>
-            <p className="text-[#64748b]">Visualización general de expedientes y pruebas CAR.</p>
+            <h1 className="text-4xl font-black text-white tracking-tighter">Ranking de Participantes</h1>
+            <p className="text-[#64748b] mt-1 text-sm">Control sintonizado de la batería neuropsicológica WCST.</p>
           </div>
-          <Link href="/" className="btn-ghost border border-[#2a2d3e] mt-4 md:mt-0 self-start md:self-auto">
-            ← Volver al inicio
-          </Link>
+          <div className="flex items-center gap-3">
+             <ExportExcelButton data={dataForExcel} />
+             <Link href="/" className="btn-ghost border border-[#2a2d3e] text-xs px-4">
+               Cerrar Panel
+             </Link>
+          </div>
         </div>
 
         {!esAdmin ? (
-          <div className="card text-center py-16 border-red-500/20 bg-red-500/5 animate-[fadeIn_0.5s_ease-out]">
-            <div className="text-4xl mb-4">⛔</div>
-            <h2 className="text-xl font-semibold text-[#e2e8f0] mb-2">Acceso Denegado</h2>
-            <p className="text-[#64748b] mb-4">Tu cuenta actual ({user?.email}) no tiene permisos V.I.P. de investigador.</p>
-            <p className="text-xs text-[#64748b] max-w-md mx-auto p-4 bg-[#1a1d2e] rounded-lg border border-[#2a2d3e]">Si eres la Maestra, asegúrate de haber ejecutado el archivo `setup_admin_db.sql` en Supabase con tu correo exacto.</p>
+          <div className="card text-center py-20 border-red-500/20 bg-red-500/5">
+             <h2 className="text-xl font-bold text-red-400">Acceso Denegado</h2>
           </div>
         ) : (
           <div className="animate-[fadeIn_0.5s_ease-out]">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-              <div className="card bg-gradient-to-br from-[#1a1d2e] to-[#6c63ff]/10">
-                <p className="text-[#64748b] text-sm font-medium">Total Estudiantes</p>
-                <div className="text-4xl font-bold text-[#e2e8f0] mt-2">{estudiantes?.length || 0}</div>
-              </div>
-              <div className="card bg-gradient-to-br from-[#1a1d2e] to-[#00d4aa]/10">
-                <p className="text-[#64748b] text-sm font-medium">Tests Realizados (Global)</p>
-                <div className="text-4xl font-bold text-[#e2e8f0] mt-2">{(resultadosCAR?.length || 0) + (resultadosWCST?.length || 0)}</div>
-              </div>
-              <div className="card bg-gradient-to-br from-[#1a1d2e] to-[#f59e0b]/10">
-                <p className="text-[#64748b] text-sm font-medium">Promedio Participación</p>
-                <div className="text-4xl font-bold text-[#e2e8f0] mt-2">
-                  {estudiantes?.length > 0 ? (((resultadosCAR?.length || 0) + (resultadosWCST?.length || 0)) / estudiantes.length).toFixed(1) : 0} <span className="text-sm font-normal">tests/ud.</span>
-                </div>
-              </div>
+            {/* KPI Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
+                  <p className="text-[10px] text-[#64748b] uppercase font-bold">Población</p>
+                  <p className="text-2xl font-bold text-[#e2e8f0]">{estudiantes?.length}</p>
+               </div>
+               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
+                  <p className="text-[10px] text-[#00d4aa] uppercase font-bold">Total Pruebas</p>
+                  <p className="text-2xl font-bold text-[#e2e8f0]">{resultadosWCST?.length}</p>
+               </div>
+               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
+                  <p className="text-[10px] text-[#6c63ff] uppercase font-bold">Promedio Categorías</p>
+                  <p className="text-2xl font-bold text-[#e2e8f0]">
+                    {(resultadosWCST?.reduce((a, b) => a + b.categorias_completadas, 0) || 0) / (resultadosWCST?.length || 1) | 0}
+                  </p>
+               </div>
+               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
+                  <p className="text-[10px] text-[#f59e0b] uppercase font-bold">Incidencia Perseverativa</p>
+                  <p className="text-2xl font-bold text-[#e2e8f0]">
+                    {Math.round((resultadosWCST?.reduce((a, b) => a + b.errores_perseverativos, 0) || 0) / (resultadosWCST?.reduce((a, b) => a + b.total_ensayos, 0) || 1) * 100)}%
+                  </p>
+               </div>
             </div>
 
-            {/* Tabla Analítica */}
-            <div className="card overflow-hidden !p-0">
+            {/* Main Analytical Table */}
+            <div className="card overflow-hidden !p-0 border-[#2a2d3e] shadow-2xl">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-[#e2e8f0]">
-                  <thead className="bg-[#1e2136] text-[#64748b] uppercase text-xs font-semibold">
+                <table className="w-full text-left text-xs text-[#e2e8f0] border-collapse">
+                  <thead className="bg-[#1e2136] text-[#64748b] uppercase font-black border-b border-[#2a2d3e]">
                     <tr>
-                      <th className="px-6 py-4 rounded-tl-xl text-[#00d4aa]">Familiar / Estudiante</th>
-                      <th className="px-6 py-4">Grado y Grupo</th>
-                      <th className="px-6 py-4">Último CAR Global</th>
-                      <th className="px-6 py-4">Último WCST</th>
-                      <th className="px-6 py-4 text-[#6c63ff]">Perfil CAR</th>
-                      <th className="px-6 py-4 text-center rounded-tr-xl">Acciones</th>
+                      <th className="px-6 py-5">Identificación alumno</th>
+                      <th className="px-6 py-5 text-center">Progreso de Categorías</th>
+                      <th className="px-6 py-5 text-center">Aciertos / Eficacia</th>
+                      <th className="px-6 py-5 text-center">Errores Pers.</th>
+                      <th className="px-6 py-5 text-center">Clasificación Clin.</th>
+                      <th className="px-6 py-5 text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2a2d3e]">
                     {estudiantes?.map((est: any) => {
-                      const testsCAR = resultadosCAR?.filter((r: any) => r.id_usuario === est.id_usuario) || []
-                      const testsWCST = resultadosWCST?.filter((r: any) => r.id_usuario === est.id_usuario) || []
+                      const tests = resultadosWCST?.filter(r => r.id_consentimiento === est.id_consentimiento) || []
+                      const res = tests[0]
                       
-                      const ultimoCAR = testsCAR[0]
-                      const ultimoWCST = testsWCST[0]
-                      
-                      const totalUltimoCAR = ultimoCAR ? (ultimoCAR.metas + ultimoCAR.perseverancia + ultimoCAR.toma_decisiones + ultimoCAR.aprendizaje_errores) : '-'
-                      
-                      let pctEP_WCST = '-'
-                      if (ultimoWCST && ultimoWCST.total_ensayos > 0) {
-                        pctEP_WCST = Math.round((ultimoWCST.errores_perseverativos / ultimoWCST.total_ensayos) * 100) + '%'
+                      const pctAciertos = res ? Math.round((res.total_aciertos / res.total_ensayos) * 100) : 0
+                      const pctEP = res ? Math.round((res.errores_perseverativos / res.total_ensayos) * 100) : 0
+
+                      // Nivel de Flexibilidad Normativo
+                      let nivel = 'Sin Pruebas / Sin Edad'
+                      let color = 'bg-[#2a2d3e] text-[#64748b]'
+                      if (res) {
+                        if (est.edad_estudiante) {
+                          const interp = interpretarPuntuacion(res.categorias_completadas, est.edad_estudiante, 'categorias')
+                          nivel = interp.interpretacion
+                          if (nivel === 'Normal') {
+                            color = 'bg-[#00d4aa]/10 text-[#00d4aa] border-[#00d4aa]/30'
+                          } else if (nivel === 'Límite') {
+                            color = 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30'
+                          } else {
+                            // "Fuera de lo normal"
+                            color = 'bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30'
+                          }
+                        } else {
+                          // Fallback para datos antiguos sin edad
+                          if (res.categorias_completadas >= 5 && pctEP <= 15) { nivel = 'Altamente Flexible'; color = 'bg-[#00d4aa]/10 text-[#00d4aa] border-[#00d4aa]/30' }
+                          else if (res.categorias_completadas >= 3) { nivel = 'Flexibilidad Promedio'; color = 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30' }
+                          else { nivel = 'Inflexibilidad Cognitiva'; color = 'bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30' }
+                        }
                       }
 
                       return (
-                        <tr key={est.id_consentimiento} className="hover:bg-[#6c63ff]/5 transition-colors group">
+                        <tr key={est.id_consentimiento} className="hover:bg-white/[0.02] transition-colors group">
                           <td className="px-6 py-4">
-                            <div className="font-bold text-white group-hover:text-[#00d4aa] transition-colors">{est.nombre_estudiante}</div>
-                            <div className="text-xs text-[#64748b]">Acudiente: {est.nombre_padre}</div>
+                            <div className="font-bold text-white group-hover:text-[#00d4aa] transition-colors uppercase tracking-tight">{est.nombre_estudiante}</div>
+                            <div className="flex gap-2 mt-1">
+                              <span className="text-[9px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded">GRADO {est.grado_estudiante}</span>
+                              <span className="text-[9px] text-[#6c63ff] font-bold">GRUPO {est.grupo_estudiante}</span>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
-                            Grado {est.grado_estudiante} - {est.grupo_estudiante}
-                          </td>
-                          <td className="px-6 py-4">
-                            {ultimoCAR ? (
-                              <span className="font-bold text-[#6c63ff]">{totalUltimoCAR} <span className="text-xs font-normal text-[#64748b]">ptos</span></span>
-                            ) : (
-                              <span className="text-[#64748b] italic text-xs">Sin presentar</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {ultimoWCST ? (
-                              <div>
-                                <span className="font-bold text-[#00d4aa]">{ultimoWCST.categorias_completadas} <span className="text-xs font-normal text-[#64748b]">Cat</span></span>
-                                <div className="text-xs text-[#f59e0b] mt-0.5">{pctEP_WCST} E.P.</div>
+                            {res ? (
+                              <div className="flex flex-col gap-1.5 max-w-[100px] mx-auto">
+                                <div className="flex justify-between text-[9px] font-bold">
+                                  <span className="text-white">{res.categorias_completadas}/6</span>
+                                  <span className="text-[#64748b]">{Math.round(res.categorias_completadas/6*100)}%</span>
+                                </div>
+                                <div className="h-1 bg-[#2a2d3e] rounded-full overflow-hidden">
+                                  <div className="h-full bg-gradient-to-r from-[#6c63ff] to-[#00d4aa]" style={{ width: `${(res.categorias_completadas/6)*100}%` }} />
+                                </div>
                               </div>
-                            ) : (
-                              <span className="text-[#64748b] italic text-xs">Sin presentar</span>
-                            )}
+                            ) : <div className="text-center">-</div>}
                           </td>
-                          <td className="px-6 py-4">
-                            {ultimoCAR ? (
-                              <span className={`px-2 py-1 text-xs rounded-full font-semibold ${
-                                ultimoCAR.estado_general === 'Alto' ? 'bg-[#00d4aa]/10 text-[#00d4aa]' : 
-                                ultimoCAR.estado_general === 'Bajo' ? 'bg-[#ef4444]/10 text-[#ef4444]' : 
-                                'bg-[#f59e0b]/10 text-[#f59e0b]'
-                              }`}>
-                                {ultimoCAR.estado_general || 'Medio'}
-                              </span>
+                          <td className="px-6 py-4 text-center">
+                             {res ? (
+                               <div>
+                                  <div className="text-[13px] font-black text-white">{res.total_aciertos}</div>
+                                  <div className="text-[9px] text-[#6c63ff] font-bold">{pctAciertos}% EFICACIA</div>
+                               </div>
+                             ) : '-'}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {res ? (
+                              <div className={`text-[13px] font-black ${pctEP > 20 ? 'text-red-500' : 'text-amber-500'}`}>
+                                {res.errores_perseverativos}
+                                <span className="text-[9px] block font-normal text-[#64748b]">{pctEP}% Incidencia</span>
+                              </div>
                             ) : '-'}
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <Link href={`/admin/${est.id_usuario}`} className="btn-ghost text-xs px-3 py-1 border border-[#2a2d3e] text-[#e2e8f0] hover:text-[#6c63ff] hover:border-[#6c63ff] transition-all">
-                              Expediente →
+                            <span className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase border ${color}`}>
+                              {nivel}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <Link href={`/admin/${est.id_consentimiento}`} className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[#2a2d3e] hover:bg-[#6c63ff] text-white transition-all shadow-md active:scale-95">
+                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                               </svg>
                             </Link>
                           </td>
                         </tr>
@@ -153,9 +224,6 @@ export default async function AdminDashboardPage() {
                     })}
                   </tbody>
                 </table>
-                {(!estudiantes || estudiantes.length === 0) && (
-                  <div className="text-center py-8 text-[#64748b]">No hay expedientes firmados aún.</div>
-                )}
               </div>
             </div>
           </div>

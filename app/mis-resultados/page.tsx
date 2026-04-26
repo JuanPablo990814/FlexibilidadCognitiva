@@ -10,14 +10,17 @@ export default async function MisResultadosPage() {
 
   if (!user) redirect('/auth/login')
 
-  // Obtener los tests realizados por el usuario ordenados por fecha
-  const [ { data: carData }, { data: wcstData } ] = await Promise.all([
-    supabase.from('resultados_autorregulacion').select('*').eq('id_usuario', user.id),
+  // Obtener solo los tests WCST (CAR oculto temporalmente)
+  const [ /* { data: carData } */, { data: wcstData } ] = await Promise.all([
+    /* supabase.from('resultados_autorregulacion').select('*').eq('id_usuario', user.id), */
+    Promise.resolve({ data: [] }), // Placeholder para mantener la estructura del Promise.all
     supabase.from('resultados_wcst').select('*').eq('id_usuario', user.id)
   ])
 
+  const carData: any[] = [] // Evitar errores de referencia
+
   const resultados = [
-    ...(carData || []).map(r => ({ ...r, testType: 'CAR' })),
+    // ...(carData || []).map(r => ({ ...r, testType: 'CAR' })),
     ...(wcstData || []).map(r => ({ ...r, testType: 'WCST' }))
   ].sort((a, b) => new Date(b.fecha_evaluacion).getTime() - new Date(a.fecha_evaluacion).getTime())
 
@@ -27,10 +30,10 @@ export default async function MisResultadosPage() {
         <div className="flex items-center justify-between mb-8 animate-[slideUp_0.4s_ease-out]">
           <div>
             <h1 className="text-3xl font-bold gradient-text">Mis Resultados</h1>
-            <p className="text-[#64748b]">Historial de tus pruebas de Flexibilidad Cognitiva</p>
+            <p className="text-[#64748b]">Historial de tus pruebas WCST</p>
           </div>
           <Link href="/" className="btn-ghost border border-[#2a2d3e]">
-            ← Volver al inicio
+            ← Ir a evaluar
           </Link>
         </div>
 
@@ -40,8 +43,8 @@ export default async function MisResultadosPage() {
             <h2 className="text-xl font-semibold text-[#e2e8f0] mb-2">Aún no hay resultados</h2>
             <p className="text-[#64748b] mb-6">Realiza tu primer test de evaluación para empezar a guardar tu progreso.</p>
             <div className="flex justify-center gap-4">
-              <Link href="/car" className="btn-primary inline-flex gap-2">
-                Ir al Test CAR →
+            <Link href="/wcst" className="btn-primary inline-flex gap-2">
+                Ir al Test WCST →
               </Link>
             </div>
           </div>
