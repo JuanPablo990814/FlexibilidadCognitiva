@@ -4,39 +4,49 @@ import { useState } from 'react'
 
 export default function StudentSelector({ estudiantes, onSelectAction }: { estudiantes: any[], onSelectAction: (id: string) => void }) {
   const [selectedId, setSelectedId] = useState<string>('')
+  const [query, setQuery] = useState('')
+  const uniqueStudents = estudiantes.filter((student, index, list) => {
+    const key = `${student.nombre_estudiante}|${student.grado_estudiante}|${student.grupo_estudiante}`.trim().toLocaleLowerCase()
+    return list.findIndex(candidate => `${candidate.nombre_estudiante}|${candidate.grado_estudiante}|${candidate.grupo_estudiante}`.trim().toLocaleLowerCase() === key) === index
+  })
+  const filtered = uniqueStudents.filter(est => `${est.nombre_estudiante} ${est.grado_estudiante} ${est.grupo_estudiante}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
-    <div className="card p-6 bg-[#1e2136]/50 border-[#2a2d3e]/50 animate-[fadeIn_0.6s_ease-out]">
-      <h3 className="text-lg font-bold text-[#e2e8f0] mb-4">Seleccionar Estudiante Activo</h3>
-      <p className="text-sm text-[#64748b] mb-4">Elige qué estudiante va a realizar la prueba en este momento.</p>
+    <div className="site-card animate-[fadeIn_0.6s_ease-out]">
+      <h3 className="text-lg font-bold text-[#20232c] mb-2">Seleccionar estudiante</h3>
+      <p className="text-sm text-[#657078] mb-5">Elige quién realizará la prueba en este momento. Hay {uniqueStudents.length} estudiantes disponibles.</p>
       
       <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        <div className="flex-1 space-y-2">
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por nombre, grado o grupo…" className="w-full bg-white border border-black/15 text-[#20232c] text-sm rounded-lg p-3 outline-none focus:border-[#302f4c]" />
         <select 
-          className="flex-1 bg-[#1a1d2e] border border-[#2a2d3e] text-white text-sm rounded-lg focus:ring-[#6c63ff] focus:border-[#6c63ff] block p-3 outline-none transition-colors"
+          className="w-full bg-white border border-black/15 text-[#20232c] text-sm rounded-lg focus:ring-[#302f4c] focus:border-[#302f4c] block p-3 outline-none transition-colors"
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
         >
           <option value="" disabled>-- Selecciona un estudiante --</option>
-          {estudiantes.map((est) => (
+          {filtered.map((est) => (
             <option key={est.id_consentimiento} value={est.id_consentimiento}>
               {est.nombre_estudiante} ({est.grado_estudiante}-{est.grupo_estudiante})
             </option>
           ))}
         </select>
+        {query && filtered.length === 0 && <p className="text-xs text-[#9b3123]">No hay estudiantes que coincidan con la búsqueda.</p>}
+        </div>
         
         <button 
           onClick={() => {
             if (selectedId) onSelectAction(selectedId)
           }}
           disabled={!selectedId}
-          className="bg-[#00d4aa] text-[#1a1d2e] disabled:opacity-50 disabled:cursor-not-allowed font-bold py-3 px-6 rounded-lg shadow hover:shadow-[#00d4aa]/30 transition-all"
+          className="site-button disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Activar y Continuar
         </button>
       </div>
 
-      <div className="pt-4 border-t border-[#2a2d3e]">
-        <a href="/consentimiento" className="text-sm text-[#6c63ff] hover:text-[#5a52d5] font-medium flex items-center gap-1">
+      <div className="pt-4 border-t border-black/10">
+        <a href="/consentimiento" className="text-sm text-[#20232c] hover:underline font-medium flex items-center gap-1">
           + Añadir nuevo estudiante (Consentimiento)
         </a>
       </div>

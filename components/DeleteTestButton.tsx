@@ -4,7 +4,7 @@ import { useTransition } from 'react'
 import { deleteTestRecord } from '@/app/admin/actions'
 import { useRouter } from 'next/navigation'
 
-export default function DeleteTestButton({ idResultado, testType }: { idResultado: string, testType: 'CAR' | 'WCST' }) {
+export default function DeleteTestButton({ idResultado, testType }: { idResultado: string, testType: 'CAR' | 'WCST' | 'CINCO_PUNTOS' | 'AF5' }) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 

@@ -19,13 +19,19 @@ export default async function AdminDashboardPage() {
   }
 
   // Obtener datos
-  const { data: estudiantes } = await supabase.from('consentimientos').select('*')
+  const { data: estudiantesRaw } = await supabase.from('consentimientos').select('*')
   const { data: resultadosWCST } = await supabase.from('resultados_wcst').select('*').order('fecha_evaluacion', { ascending: false })
+  const { data: resultadosCincoPuntos } = await supabase.from('resultados_cinco_puntos').select('*').order('fecha_evaluacion', { ascending: false })
+  const { data: resultadosAF5 } = await supabase.from('resultados_af5').select('*').order('fecha_evaluacion', { ascending: false })
 
-  const esAdmin = estudiantes !== null
+  const esAdmin = estudiantesRaw !== null
+  const estudiantes = (estudiantesRaw || []).filter((student, index, list) => {
+    const key = `${student.nombre_estudiante}|${student.grado_estudiante}|${student.grupo_estudiante}`.trim().toLocaleLowerCase()
+    return list.findIndex(candidate => `${candidate.nombre_estudiante}|${candidate.grado_estudiante}|${candidate.grupo_estudiante}`.trim().toLocaleLowerCase() === key) === index
+  })
 
   // Preparar datos para exportación masiva con detalle de los 64 ensayos
-  const dataForExcel = (estudiantes || []).map(est => {
+  const dataForExcel = estudiantes.map(est => {
     const res = resultadosWCST?.find(r => r.id_consentimiento === est.id_consentimiento)
     
     // Objeto base con datos generales
@@ -100,10 +106,20 @@ export default async function AdminDashboardPage() {
         ) : (
           <div className="animate-[fadeIn_0.5s_ease-out]">
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-8">
                <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
                   <p className="text-[10px] text-[#64748b] uppercase font-bold">Población</p>
                   <p className="text-2xl font-bold text-[#e2e8f0]">{estudiantes?.length}</p>
+               </div>
+               <div className="card bg-[#1a1d2e] border-[#a855f7]/30">
+                  <p className="text-[10px] text-[#c084fc] uppercase font-bold">Cinco Puntos</p>
+                  <p className="text-2xl font-bold text-[#e2e8f0]">{resultadosCincoPuntos?.length ?? 0}</p>
+                  <p className="text-[10px] text-[#64748b]">ejecuciones registradas</p>
+               </div>
+               <div className="card bg-[#1a1d2e] border-[#f59e0b]/30">
+                  <p className="text-[10px] text-[#fbbf24] uppercase font-bold">Autoconcepto AF5</p>
+                  <p className="text-2xl font-bold text-[#e2e8f0]">{resultadosAF5?.length ?? 0}</p>
+                  <p className="text-[10px] text-[#64748b]">cuestionarios registrados</p>
                </div>
                <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
                   <p className="text-[10px] text-[#00d4aa] uppercase font-bold">Total Pruebas</p>
@@ -132,6 +148,8 @@ export default async function AdminDashboardPage() {
                       <th className="px-6 py-5">Identificación alumno</th>
                       <th className="px-6 py-5 text-center">Progreso de Categorías</th>
                       <th className="px-6 py-5 text-center">Aciertos / Eficacia</th>
+                      <th className="px-6 py-5 text-center">Cinco Puntos</th>
+                      <th className="px-6 py-5 text-center">AF5</th>
                       <th className="px-6 py-5 text-center">Errores Pers.</th>
                       <th className="px-6 py-5 text-center">Clasificación Clin.</th>
                       <th className="px-6 py-5 text-center">Acción</th>
@@ -141,6 +159,11 @@ export default async function AdminDashboardPage() {
                     {estudiantes?.map((est: any) => {
                       const tests = resultadosWCST?.filter(r => r.id_consentimiento === est.id_consentimiento) || []
                       const res = tests[0]
+                      const fivePoint = resultadosCincoPuntos?.find(r => r.id_consentimiento === est.id_consentimiento)
+                      const af5 = resultadosAF5?.find(r => r.id_consentimiento === est.id_consentimiento)
+                      const fivePointEvaluation = Array.isArray(fivePoint?.evaluacion) ? fivePoint.evaluacion : []
+                      const uniqueFivePoint = fivePointEvaluation.filter((value: string) => value === 'unico').length
+                      const af5Average = af5 ? Math.round((Number(af5.academico_laboral) + Number(af5.social) + Number(af5.emocional) + Number(af5.familiar) + Number(af5.fisico)) / 5) : null
                       
                       const pctAciertos = res ? Math.round((res.total_aciertos / res.total_ensayos) * 100) : 0
                       const pctEP = res ? Math.round((res.errores_perseverativos / res.total_ensayos) * 100) : 0
@@ -197,6 +220,12 @@ export default async function AdminDashboardPage() {
                                   <div className="text-[9px] text-[#6c63ff] font-bold">{pctAciertos}% EFICACIA</div>
                                </div>
                              ) : '-'}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {fivePoint ? <div><div className="text-[13px] font-black text-[#c084fc]">{uniqueFivePoint} únicas</div><div className="text-[9px] text-[#64748b]">{fivePoint.figuras_completadas}/30 figuras</div></div> : <span className="text-[#64748b]">Pendiente</span>}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {af5 ? <div><div className="text-[13px] font-black text-[#fbbf24]">{af5Average}/99</div><div className="text-[9px] text-[#64748b]">promedio dimensiones</div></div> : <span className="text-[#64748b]">Pendiente</span>}
                           </td>
                           <td className="px-6 py-4 text-center">
                             {res ? (

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DeleteTestButton from '@/components/DeleteTestButton'
 import WcstHistoryTable from '@/components/WcstHistoryTable'
+import FivePointEvaluation from '@/components/FivePointEvaluation'
 import { interpretarPuntuacion } from '@/lib/normativasWCST'
 import { isAdmin } from '@/lib/authUtils'
 
@@ -39,10 +40,12 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
   }
 
   // Consulta 2: Puntuaciones del WCST (CAR omitido)
-  const [ /* { data: carData } */, { data: wcstData } ] = await Promise.all([
+  const [ /* { data: carData } */, { data: wcstData }, { data: cincoPuntosData }, { data: af5Data } ] = await Promise.all([
     /* supabase.from('resultados_autorregulacion').select('*').eq('id_usuario', id_usuario), */
     Promise.resolve({ data: [] }),
-    supabase.from('resultados_wcst').select('*').eq('id_consentimiento', id_usuario)
+    supabase.from('resultados_wcst').select('*').eq('id_consentimiento', id_usuario),
+    supabase.from('resultados_cinco_puntos').select('*').eq('id_consentimiento', id_usuario),
+    supabase.from('resultados_af5').select('*').eq('id_consentimiento', id_usuario)
   ])
 
   const carData: any[] = []
@@ -50,7 +53,9 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
   // Combinar y organizar solo WCST
   const resultados = [
     // ...(carData || []).map(r => ({ ...r, testType: 'CAR' })),
-    ...(wcstData || []).map(r => ({ ...r, testType: 'WCST' }))
+    ...(wcstData || []).map(r => ({ ...r, testType: 'WCST' })),
+    ...(cincoPuntosData || []).map(r => ({ ...r, testType: 'CINCO_PUNTOS' })),
+    ...(af5Data || []).map(r => ({ ...r, testType: 'AF5' }))
   ].sort((a, b) => new Date(b.fecha_evaluacion).getTime() - new Date(a.fecha_evaluacion).getTime())
 
   return (
@@ -204,6 +209,44 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
 
                     {/* Bitácora de Decisiones (Lo que escogió el estudiante) */}
                     <WcstHistoryTable res={res} />
+                  </div>
+                )
+              }
+
+              if (res.testType === 'CINCO_PUNTOS') {
+                const evaluation = Array.isArray(res.evaluacion) ? res.evaluacion : []
+                const unique = evaluation.filter((value: string) => value === 'unico').length
+                const repeated = evaluation.filter((value: string) => value === 'repetido').length
+                const infractions = evaluation.filter((value: string) => value === 'infraccion').length
+                return (
+                  <div key={res.id_resultado} className="card relative overflow-hidden border-[#a855f7]/40 pt-10">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-[#a855f7]" />
+                    <DeleteTestButton idResultado={res.id_resultado} testType="CINCO_PUNTOS" />
+                    <div className="flex flex-col md:flex-row gap-5">
+                      <div className="md:w-1/4"><span className="text-[10px] font-bold tracking-widest text-[#c084fc] uppercase">Fluidez figural</span><h3 className="text-xl font-bold text-white mt-1">Cinco Puntos</h3><p className="text-xs text-[#64748b] mt-2">{fecha}</p><p className="text-3xl font-bold text-[#c084fc] mt-5">{unique}<span className="text-sm font-normal text-[#64748b]"> únicas</span></p></div>
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 flex-1"><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">Figuras</p><p className="text-lg font-mono text-white">{res.figuras_completadas}/30</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#f59e0b] uppercase">Repetidas</p><p className="text-lg font-mono text-white">{repeated}</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#ef4444] uppercase">Infracciones</p><p className="text-lg font-mono text-white">{infractions}</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#c084fc] uppercase">Tiempo</p><p className="text-lg font-mono text-white">{Math.floor(res.tiempo_segundos / 60)}:{String(res.tiempo_segundos % 60).padStart(2, '0')}</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">Instrucción</p><p className="text-xs font-mono text-white">{res.comprendio_instruccion == null ? 'Sin dato' : res.comprendio_instruccion ? 'Comprendió' : 'No comprendió'}</p><p className="text-[9px] text-[#64748b]">{res.repitio_instruccion == null ? '' : res.repitio_instruccion ? 'Se repitió' : 'No se repitió'}</p></div></div>
+                    </div>
+                    <FivePointEvaluation idResultado={res.id_resultado} designs={Array.isArray(res.disenos) ? res.disenos : []} initialEvaluation={evaluation} />
+                  </div>
+                )
+              }
+
+              if (res.testType === 'AF5') {
+                const dimensiones = [
+                  ['Académico/laboral', res.academico_laboral],
+                  ['Social', res.social],
+                  ['Emocional', res.emocional],
+                  ['Familiar', res.familiar],
+                  ['Físico', res.fisico],
+                ]
+                return (
+                  <div key={res.id_resultado} className="card relative overflow-hidden border-[#38bdf8]/40 pt-10">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-[#38bdf8]" />
+                    <DeleteTestButton idResultado={res.id_resultado} testType="AF5" />
+                    <div className="flex flex-col md:flex-row gap-5">
+                      <div className="md:w-1/4"><span className="text-[10px] font-bold tracking-widest text-[#38bdf8] uppercase">Autoconcepto</span><h3 className="text-xl font-bold text-white mt-1">Cuestionario AF5</h3><p className="text-xs text-[#64748b] mt-2">{fecha}</p><p className="text-xs text-[#64748b] mt-5">Escala de 1 a 99</p></div>
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 flex-1">{dimensiones.map(([nombre, valor]) => <div key={String(nombre)} className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">{nombre}</p><p className="text-lg font-mono text-white">{Number(valor).toFixed(1)}</p></div>)}</div>
+                    </div>
                   </div>
                 )
               }
