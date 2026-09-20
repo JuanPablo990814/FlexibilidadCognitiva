@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-export async function deleteTestRecord(id_resultado: string, testType: 'CAR' | 'WCST' | 'CINCO_PUNTOS' | 'AF5') {
+export async function deleteTestRecord(id_resultado: string, testType: 'CAR' | 'WCST' | 'CINCO_PUNTOS' | 'AF5' | 'CONNERS') {
   const supabase = await createClient()
 
   // 1. Verificación en la nube (el backend verifica el JWT/RLS)
@@ -13,7 +13,9 @@ export async function deleteTestRecord(id_resultado: string, testType: 'CAR' | '
       ? 'resultados_wcst'
       : testType === 'CINCO_PUNTOS'
         ? 'resultados_cinco_puntos'
-        : 'resultados_af5'
+        : testType === 'AF5'
+          ? 'resultados_af5'
+          : 'resultados_conners_docente'
 
   // 2. Ejecutar la desintegración
   const { error } = await supabase

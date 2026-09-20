@@ -40,12 +40,13 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
   }
 
   // Consulta 2: Puntuaciones del WCST (CAR omitido)
-  const [ /* { data: carData } */, { data: wcstData }, { data: cincoPuntosData }, { data: af5Data } ] = await Promise.all([
+  const [ /* { data: carData } */, { data: wcstData }, { data: cincoPuntosData }, { data: af5Data }, { data: connersData } ] = await Promise.all([
     /* supabase.from('resultados_autorregulacion').select('*').eq('id_usuario', id_usuario), */
     Promise.resolve({ data: [] }),
     supabase.from('resultados_wcst').select('*').eq('id_consentimiento', id_usuario),
     supabase.from('resultados_cinco_puntos').select('*').eq('id_consentimiento', id_usuario),
-    supabase.from('resultados_af5').select('*').eq('id_consentimiento', id_usuario)
+    supabase.from('resultados_af5').select('*').eq('id_consentimiento', id_usuario),
+    supabase.from('resultados_conners_docente').select('*').eq('id_consentimiento', id_usuario)
   ])
 
   const carData: any[] = []
@@ -55,7 +56,8 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
     // ...(carData || []).map(r => ({ ...r, testType: 'CAR' })),
     ...(wcstData || []).map(r => ({ ...r, testType: 'WCST' })),
     ...(cincoPuntosData || []).map(r => ({ ...r, testType: 'CINCO_PUNTOS' })),
-    ...(af5Data || []).map(r => ({ ...r, testType: 'AF5' }))
+    ...(af5Data || []).map(r => ({ ...r, testType: 'AF5' })),
+    ...(connersData || []).map(r => ({ ...r, testType: 'CONNERS' }))
   ].sort((a, b) => new Date(b.fecha_evaluacion).getTime() - new Date(a.fecha_evaluacion).getTime())
 
   return (
@@ -247,6 +249,16 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
                       <div className="md:w-1/4"><span className="text-[10px] font-bold tracking-widest text-[#38bdf8] uppercase">Autoconcepto</span><h3 className="text-xl font-bold text-white mt-1">Cuestionario AF5</h3><p className="text-xs text-[#64748b] mt-2">{fecha}</p><p className="text-xs text-[#64748b] mt-5">Escala de 1 a 99</p></div>
                       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 flex-1">{dimensiones.map(([nombre, valor]) => <div key={String(nombre)} className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">{nombre}</p><p className="text-lg font-mono text-white">{Number(valor).toFixed(1)}</p></div>)}</div>
                     </div>
+                  </div>
+                )
+              }
+
+              if (res.testType === 'CONNERS') {
+                return (
+                  <div key={res.id_resultado} className="card relative overflow-hidden border-[#22c55e]/40 pt-10">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-[#22c55e]" />
+                    <DeleteTestButton idResultado={res.id_resultado} testType="CONNERS" />
+                    <div className="flex flex-col md:flex-row gap-5"><div className="md:w-1/4"><span className="text-[10px] font-bold tracking-widest text-[#4ade80] uppercase">Valoración docente</span><h3 className="text-xl font-bold text-white mt-1">Conners abreviado</h3><p className="text-xs text-[#64748b] mt-2">{fecha}</p></div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1"><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">Índice total</p><p className="text-lg font-mono text-white">{res.total}/30</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">Docente</p><p className="text-xs font-mono text-white">{res.nombre_docente}</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">Curso</p><p className="text-xs font-mono text-white">{res.curso_observado || 'Sin dato'}</p></div><div className="bg-[#1a1d2e] p-3 rounded-xl text-center"><p className="text-[10px] text-[#64748b] uppercase">Observación</p><p className="text-xs font-mono text-white">{res.observaciones || 'Sin observaciones'}</p></div></div></div>
                   </div>
                 )
               }

@@ -2,262 +2,72 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ExportExcelButton from '@/components/ExportExcelButton'
-import { interpretarPuntuacion } from '@/lib/normativasWCST'
 import { isAdmin } from '@/lib/authUtils'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
+const studentKey = (student: any) => [student.nombre_estudiante, student.grado_estudiante, student.grupo_estudiante]
+  .map(value => String(value ?? '').trim().toLocaleLowerCase()).join('|')
+
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-
   if (!user) redirect('/auth/login')
-  
-  if (!isAdmin(user.email)) {
-    redirect('/')
-  }
+  if (!isAdmin(user.email)) redirect('/')
 
-  // Obtener datos
-  const { data: estudiantesRaw } = await supabase.from('consentimientos').select('*')
-  const { data: resultadosWCST } = await supabase.from('resultados_wcst').select('*').order('fecha_evaluacion', { ascending: false })
-  const { data: resultadosCincoPuntos } = await supabase.from('resultados_cinco_puntos').select('*').order('fecha_evaluacion', { ascending: false })
-  const { data: resultadosAF5 } = await supabase.from('resultados_af5').select('*').order('fecha_evaluacion', { ascending: false })
+  const [{ data: rawStudents }, { data: wcst }, { data: fivePoints }, { data: af5 }, { data: conners }] = await Promise.all([
+    supabase.from('consentimientos').select('*'),
+    supabase.from('resultados_wcst').select('*').order('fecha_evaluacion', { ascending: false }),
+    supabase.from('resultados_cinco_puntos').select('*').order('fecha_evaluacion', { ascending: false }),
+    supabase.from('resultados_af5').select('*').order('fecha_evaluacion', { ascending: false }),
+    supabase.from('resultados_conners_docente').select('*').order('fecha_evaluacion', { ascending: false }),
+  ])
 
-  const esAdmin = estudiantesRaw !== null
-  const estudiantes = (estudiantesRaw || []).filter((student, index, list) => {
-    const key = `${student.nombre_estudiante}|${student.grado_estudiante}|${student.grupo_estudiante}`.trim().toLocaleLowerCase()
-    return list.findIndex(candidate => `${candidate.nombre_estudiante}|${candidate.grado_estudiante}|${candidate.grupo_estudiante}`.trim().toLocaleLowerCase() === key) === index
+  const students = (rawStudents || []).filter((student, index, list) => list.findIndex(candidate => studentKey(candidate) === studentKey(student)) === index)
+  const latest = (records: any[] | null, id: string) => (records || []).find(record => record.id_consentimiento === id)
+  const exportRows = students.map(student => {
+    const wcstResult = latest(wcst, student.id_consentimiento)
+    const five = latest(fivePoints, student.id_consentimiento)
+    const af5Result = latest(af5, student.id_consentimiento)
+    const connersResult = latest(conners, student.id_consentimiento)
+    const evaluation = Array.isArray(five?.evaluacion) ? five.evaluacion : []
+    const rawAf5 = af5Result?.respuestas || {}
+    const rawConners = connersResult?.respuestas || {}
+    const wcstTrials = Array.isArray(wcstResult?.historial) ? wcstResult.historial : []
+    const base = {
+      Estudiante: student.nombre_estudiante,
+      Grado: student.grado_estudiante,
+      Grupo: student.grupo_estudiante,
+      WCST_fecha: wcstResult?.fecha_evaluacion ?? '',
+      WCST_categorias: wcstResult?.categorias_completadas ?? '',
+      WCST_aciertos: wcstResult?.total_aciertos ?? '',
+      WCST_errores_perseverativos: wcstResult?.errores_perseverativos ?? '',
+      WCST_errores_no_perseverativos: wcstResult?.errores_no_perseverativos ?? '',
+      WCST_fallos_mantenimiento: wcstResult?.fallos_al_mantener ?? '',
+      Cinco_puntos_fecha: five?.fecha_evaluacion ?? '',
+      Cinco_puntos_figuras: five?.figuras_completadas ?? '',
+      Cinco_puntos_tiempo_segundos: five?.tiempo_segundos ?? '',
+      Cinco_puntos_unicas: five ? evaluation.filter((value: string) => value === 'unico').length : '',
+      Cinco_puntos_repetidas: five ? evaluation.filter((value: string) => value === 'repetido').length : '',
+      Cinco_puntos_infracciones: five ? evaluation.filter((value: string) => value === 'infraccion').length : '',
+      AF5_fecha: af5Result?.fecha_evaluacion ?? '',
+      AF5_academico_laboral: af5Result?.academico_laboral ?? '', AF5_social: af5Result?.social ?? '', AF5_emocional: af5Result?.emocional ?? '', AF5_familiar: af5Result?.familiar ?? '', AF5_fisico: af5Result?.fisico ?? '',
+      Conners_fecha: connersResult?.fecha_evaluacion ?? '', Conners_docente: connersResult?.nombre_docente ?? '', Conners_curso: connersResult?.curso_observado ?? '', Conners_total: connersResult?.total ?? '', Conners_observaciones: connersResult?.observaciones ?? '',
+    }
+    const trialColumns = Object.fromEntries(Array.from({ length: 64 }, (_, index) => [`WCST_ensayo_${index + 1}`, wcstTrials[index] ? (wcstTrials[index].correcto ? 'Acierto' : wcstTrials[index].esPersonerativo ? 'Error perseverativo' : 'Error') : '']))
+    const fivePointColumns = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`Cinco_puntos_figura_${index + 1}`, evaluation[index] ?? '']))
+    const af5Columns = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`AF5_item_${index + 1}`, rawAf5[index + 1] ?? '']))
+    const connersColumns = Object.fromEntries(Array.from({ length: 10 }, (_, index) => [`Conners_item_${index + 1}`, rawConners[index + 1] ?? '']))
+    return { ...base, ...trialColumns, ...fivePointColumns, ...af5Columns, ...connersColumns }
   })
 
-  // Preparar datos para exportación masiva con detalle de los 64 ensayos
-  const dataForExcel = estudiantes.map(est => {
-    const res = resultadosWCST?.find(r => r.id_consentimiento === est.id_consentimiento)
-    
-    // Objeto base con datos generales
-    const row: any = {
-      Estudiante: est.nombre_estudiante,
-      Grado: `${est.grado_estudiante} - ${est.grupo_estudiante}`,
-      Categorias: res?.categorias_completadas || 0,
-      Total_Aciertos: res?.total_aciertos || 0,
-      Errores_Perseverativos: res?.errores_perseverativos || 0,
-      Errores_No_Perseverativos: res?.errores_no_perseverativos || 0,
-      Fallos_Mantenimiento: res?.fallos_al_mantener || 0,
-      Sello_Fecha: res ? new Date(res.fecha_evaluacion).toLocaleString() : 'Pendiente'
-    }
-
-    if (res && est.edad_estudiante) {
-      const interpCat = interpretarPuntuacion(res.categorias_completadas, est.edad_estudiante, 'categorias')
-      const interpErr = interpretarPuntuacion(res.errores_perseverativos, est.edad_estudiante, 'errores_perseverativos')
-      
-      row['Edad'] = est.edad_estudiante
-      row['Interp_Categorías'] = interpCat.interpretacion
-      row['Conclusión_Categorías'] = interpCat.conclusion
-      row['Explicación_Categorías'] = interpCat.explicacionSimple
-      row['Rango_Normal_Categorías'] = interpCat.rangoNormal
-      
-      row['Interp_Errores'] = interpErr.interpretacion
-      row['Conclusión_Errores'] = interpErr.conclusion
-      row['Explicación_Errores'] = interpErr.explicacionSimple
-      row['Rango_Normal_Errores'] = interpErr.rangoNormal
-    }
-
-    // Añadir 64 columnas para los 64 ensayos (E1, E2, ... E64)
-    if (res?.historial && Array.isArray(res.historial)) {
-      res.historial.forEach((h: any, i: number) => {
-        let status = 'Error'
-        if (h.correcto) status = 'Acierto'
-        if (h.esPersonerativo) status = 'E. Perseverativo'
-        
-        row[`Ensayo_${i + 1}_Regla_${h.regla}`] = status
-      })
-    } else if (res) {
-       // Si el test se hizo antes de activar el historial, llenar con '-'
-       for(let i=1; i<=64; i++) row[`Ensayo_${i}`] = 'Sin historial (Test Antiguo)'
-    }
-
-    return row
-  })
-
-  return (
-    <div className="min-h-screen py-10 px-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 gap-6 animate-[slideUp_0.4s_ease-out]">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-[#00d4aa]/20 text-[#00d4aa] px-2 py-1 rounded text-[10px] font-bold uppercase border border-[#00d4aa]/40">Módulo Administrativo</span>
-              <span className="text-[#64748b] text-xs">Análisis de Flexibilidad y Funciones Ejecutivas</span>
-            </div>
-            <h1 className="text-4xl font-black text-white tracking-tighter">Ranking de Participantes</h1>
-            <p className="text-[#64748b] mt-1 text-sm">Control sintonizado de la batería neuropsicológica WCST.</p>
-          </div>
-          <div className="flex items-center gap-3">
-             <ExportExcelButton data={dataForExcel} />
-             <Link href="/" className="btn-ghost border border-[#2a2d3e] text-xs px-4">
-               Cerrar Panel
-             </Link>
-          </div>
-        </div>
-
-        {!esAdmin ? (
-          <div className="card text-center py-20 border-red-500/20 bg-red-500/5">
-             <h2 className="text-xl font-bold text-red-400">Acceso Denegado</h2>
-          </div>
-        ) : (
-          <div className="animate-[fadeIn_0.5s_ease-out]">
-            {/* KPI Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-8">
-               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
-                  <p className="text-[10px] text-[#64748b] uppercase font-bold">Población</p>
-                  <p className="text-2xl font-bold text-[#e2e8f0]">{estudiantes?.length}</p>
-               </div>
-               <div className="card bg-[#1a1d2e] border-[#a855f7]/30">
-                  <p className="text-[10px] text-[#c084fc] uppercase font-bold">Cinco Puntos</p>
-                  <p className="text-2xl font-bold text-[#e2e8f0]">{resultadosCincoPuntos?.length ?? 0}</p>
-                  <p className="text-[10px] text-[#64748b]">ejecuciones registradas</p>
-               </div>
-               <div className="card bg-[#1a1d2e] border-[#f59e0b]/30">
-                  <p className="text-[10px] text-[#fbbf24] uppercase font-bold">Autoconcepto AF5</p>
-                  <p className="text-2xl font-bold text-[#e2e8f0]">{resultadosAF5?.length ?? 0}</p>
-                  <p className="text-[10px] text-[#64748b]">cuestionarios registrados</p>
-               </div>
-               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
-                  <p className="text-[10px] text-[#00d4aa] uppercase font-bold">Total Pruebas</p>
-                  <p className="text-2xl font-bold text-[#e2e8f0]">{resultadosWCST?.length}</p>
-               </div>
-               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
-                  <p className="text-[10px] text-[#6c63ff] uppercase font-bold">Promedio Categorías</p>
-                  <p className="text-2xl font-bold text-[#e2e8f0]">
-                    {(resultadosWCST?.reduce((a, b) => a + b.categorias_completadas, 0) || 0) / (resultadosWCST?.length || 1) | 0}
-                  </p>
-               </div>
-               <div className="card bg-[#1a1d2e] border-[#2a2d3e]">
-                  <p className="text-[10px] text-[#f59e0b] uppercase font-bold">Incidencia Perseverativa</p>
-                  <p className="text-2xl font-bold text-[#e2e8f0]">
-                    {Math.round((resultadosWCST?.reduce((a, b) => a + b.errores_perseverativos, 0) || 0) / (resultadosWCST?.reduce((a, b) => a + b.total_ensayos, 0) || 1) * 100)}%
-                  </p>
-               </div>
-            </div>
-
-            {/* Main Analytical Table */}
-            <div className="card overflow-hidden !p-0 border-[#2a2d3e] shadow-2xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-[#e2e8f0] border-collapse">
-                  <thead className="bg-[#1e2136] text-[#64748b] uppercase font-black border-b border-[#2a2d3e]">
-                    <tr>
-                      <th className="px-6 py-5">Identificación alumno</th>
-                      <th className="px-6 py-5 text-center">Progreso de Categorías</th>
-                      <th className="px-6 py-5 text-center">Aciertos / Eficacia</th>
-                      <th className="px-6 py-5 text-center">Cinco Puntos</th>
-                      <th className="px-6 py-5 text-center">AF5</th>
-                      <th className="px-6 py-5 text-center">Errores Pers.</th>
-                      <th className="px-6 py-5 text-center">Clasificación Clin.</th>
-                      <th className="px-6 py-5 text-center">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2a2d3e]">
-                    {estudiantes?.map((est: any) => {
-                      const tests = resultadosWCST?.filter(r => r.id_consentimiento === est.id_consentimiento) || []
-                      const res = tests[0]
-                      const fivePoint = resultadosCincoPuntos?.find(r => r.id_consentimiento === est.id_consentimiento)
-                      const af5 = resultadosAF5?.find(r => r.id_consentimiento === est.id_consentimiento)
-                      const fivePointEvaluation = Array.isArray(fivePoint?.evaluacion) ? fivePoint.evaluacion : []
-                      const uniqueFivePoint = fivePointEvaluation.filter((value: string) => value === 'unico').length
-                      const af5Average = af5 ? Math.round((Number(af5.academico_laboral) + Number(af5.social) + Number(af5.emocional) + Number(af5.familiar) + Number(af5.fisico)) / 5) : null
-                      
-                      const pctAciertos = res ? Math.round((res.total_aciertos / res.total_ensayos) * 100) : 0
-                      const pctEP = res ? Math.round((res.errores_perseverativos / res.total_ensayos) * 100) : 0
-
-                      // Nivel de Flexibilidad Normativo
-                      let nivel = 'Sin Pruebas / Sin Edad'
-                      let color = 'bg-[#2a2d3e] text-[#64748b]'
-                      if (res) {
-                        if (est.edad_estudiante) {
-                          const interp = interpretarPuntuacion(res.categorias_completadas, est.edad_estudiante, 'categorias')
-                          nivel = interp.interpretacion
-                          if (nivel === 'Normal') {
-                            color = 'bg-[#00d4aa]/10 text-[#00d4aa] border-[#00d4aa]/30'
-                          } else if (nivel === 'Límite') {
-                            color = 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30'
-                          } else {
-                            // "Fuera de lo normal"
-                            color = 'bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30'
-                          }
-                        } else {
-                          // Fallback para datos antiguos sin edad
-                          if (res.categorias_completadas >= 5 && pctEP <= 15) { nivel = 'Altamente Flexible'; color = 'bg-[#00d4aa]/10 text-[#00d4aa] border-[#00d4aa]/30' }
-                          else if (res.categorias_completadas >= 3) { nivel = 'Flexibilidad Promedio'; color = 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30' }
-                          else { nivel = 'Inflexibilidad Cognitiva'; color = 'bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30' }
-                        }
-                      }
-
-                      return (
-                        <tr key={est.id_consentimiento} className="hover:bg-white/[0.02] transition-colors group">
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-white group-hover:text-[#00d4aa] transition-colors uppercase tracking-tight">{est.nombre_estudiante}</div>
-                            <div className="flex gap-2 mt-1">
-                              <span className="text-[9px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded">GRADO {est.grado_estudiante}</span>
-                              <span className="text-[9px] text-[#6c63ff] font-bold">GRUPO {est.grupo_estudiante}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            {res ? (
-                              <div className="flex flex-col gap-1.5 max-w-[100px] mx-auto">
-                                <div className="flex justify-between text-[9px] font-bold">
-                                  <span className="text-white">{res.categorias_completadas}/6</span>
-                                  <span className="text-[#64748b]">{Math.round(res.categorias_completadas/6*100)}%</span>
-                                </div>
-                                <div className="h-1 bg-[#2a2d3e] rounded-full overflow-hidden">
-                                  <div className="h-full bg-gradient-to-r from-[#6c63ff] to-[#00d4aa]" style={{ width: `${(res.categorias_completadas/6)*100}%` }} />
-                                </div>
-                              </div>
-                            ) : <div className="text-center">-</div>}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                             {res ? (
-                               <div>
-                                  <div className="text-[13px] font-black text-white">{res.total_aciertos}</div>
-                                  <div className="text-[9px] text-[#6c63ff] font-bold">{pctAciertos}% EFICACIA</div>
-                               </div>
-                             ) : '-'}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {fivePoint ? <div><div className="text-[13px] font-black text-[#c084fc]">{uniqueFivePoint} únicas</div><div className="text-[9px] text-[#64748b]">{fivePoint.figuras_completadas}/30 figuras</div></div> : <span className="text-[#64748b]">Pendiente</span>}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {af5 ? <div><div className="text-[13px] font-black text-[#fbbf24]">{af5Average}/99</div><div className="text-[9px] text-[#64748b]">promedio dimensiones</div></div> : <span className="text-[#64748b]">Pendiente</span>}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {res ? (
-                              <div className={`text-[13px] font-black ${pctEP > 20 ? 'text-red-500' : 'text-amber-500'}`}>
-                                {res.errores_perseverativos}
-                                <span className="text-[9px] block font-normal text-[#64748b]">{pctEP}% Incidencia</span>
-                              </div>
-                            ) : '-'}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase border ${color}`}>
-                              {nivel}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <Link href={`/admin/${est.id_consentimiento}`} className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[#2a2d3e] hover:bg-[#6c63ff] text-white transition-all shadow-md active:scale-95">
-                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                               </svg>
-                            </Link>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  return <main className="site-shell"><section className="site-hero px-6 pt-7 pb-24"><div className="max-w-7xl mx-auto"><header className="site-nav"><div className="brand-lockup"><span className="brand-dot" />Panel investigador</div><div className="nav-pills"><Link href="/" className="nav-pill">Cerrar panel</Link></div></header><div className="mt-16"><p className="site-eyebrow">Seguimiento de evaluaciones</p><h1 className="display-title display-title--small mt-3">Resultados que<br />sí se entienden.</h1><p className="site-copy text-lg max-w-2xl mt-6">Consulta el progreso de cada estudiante y las valoraciones realizadas por niños y docentes.</p></div></div></section>
+    <section className="max-w-7xl mx-auto px-6 -mt-10 relative z-10 pb-12"><div className="grid grid-cols-2 lg:grid-cols-5 gap-4"><Kpi label="Estudiantes" value={students.length} detail="disponibles" /><Kpi label="Wisconsin" value={(wcst || []).length} detail="intentos registrados" /><Kpi label="Cinco puntos" value={(fivePoints || []).length} detail="ejecuciones registradas" /><Kpi label="AF5" value={(af5 || []).length} detail="cuestionarios registrados" /><Kpi label="Conners docente" value={(conners || []).length} detail="valoraciones registradas" /></div>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mt-10 mb-5"><div><p className="site-eyebrow">Estudiantes</p><h2 className="text-3xl font-semibold tracking-tight mt-2">Panel de seguimiento</h2></div><ExportExcelButton data={exportRows} filename="Resultados_evaluaciones.xlsx" /></div>
+      <div className="site-card !p-0 overflow-x-auto"><table className="w-full min-w-[920px] text-left"><thead className="bg-[#eef3f2] text-[#50686c] text-xs uppercase tracking-[.12em]"><tr><th className="px-6 py-4">Estudiante</th><th className="px-5 py-4 text-center">Wisconsin</th><th className="px-5 py-4 text-center">Cinco puntos</th><th className="px-5 py-4 text-center">AF5</th><th className="px-5 py-4 text-center">Conners docente</th><th className="px-5 py-4 text-center">Expediente</th></tr></thead><tbody className="divide-y divide-[#e1e5e4]">{students.map(student => { const wcstResult = latest(wcst, student.id_consentimiento); const five = latest(fivePoints, student.id_consentimiento); const af5Result = latest(af5, student.id_consentimiento); const connersResult = latest(conners, student.id_consentimiento); const unique = Array.isArray(five?.evaluacion) ? five.evaluacion.filter((value: string) => value === 'unico').length : null; const af5Mean = af5Result ? Math.round((Number(af5Result.academico_laboral) + Number(af5Result.social) + Number(af5Result.emocional) + Number(af5Result.familiar) + Number(af5Result.fisico)) / 5) : null; return <tr key={student.id_consentimiento} className="hover:bg-[#fafbf9]"><td className="px-6 py-5"><strong className="block text-[#20232c]">{student.nombre_estudiante}</strong><span className="text-xs text-[#657078]">Grado {student.grado_estudiante} · Grupo {student.grupo_estudiante}</span></td><td className="px-5 py-5 text-center"><Status value={wcstResult ? `${wcstResult.categorias_completadas}/6 categorías` : null} /></td><td className="px-5 py-5 text-center"><Status value={five ? `${unique ?? 0} únicas · ${five.figuras_completadas}/30` : null} /></td><td className="px-5 py-5 text-center"><Status value={af5Result ? `${af5Mean}/99 promedio` : null} /></td><td className="px-5 py-5 text-center"><Status value={connersResult ? `${connersResult.total}/30 · ${connersResult.nombre_docente}` : null} /></td><td className="px-5 py-5 text-center"><Link href={`/admin/${student.id_consentimiento}`} className="site-button site-button--light text-xs">Ver →</Link></td></tr> })}</tbody></table></div>
+    </section></main>
 }
+
+function Kpi({ label, value, detail }: { label: string, value: number, detail: string }) { return <div className="site-card"><p className="site-eyebrow">{label}</p><p className="text-4xl font-semibold tracking-tight mt-3">{value}</p><p className="text-xs text-[#657078] mt-2">{detail}</p></div> }
+function Status({ value }: { value: string | null }) { return value ? <span className="inline-flex rounded-full bg-[#e8f1eb] px-3 py-1.5 text-xs font-semibold text-[#265a3b]">{value}</span> : <span className="text-sm text-[#8a9497]">Pendiente</span> }
