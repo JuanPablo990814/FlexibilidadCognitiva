@@ -76,7 +76,7 @@ interface Metricas {
 }
 
 type FeedbackState = 'correct' | 'incorrect' | null
-type Step = 'intro' | 'test' | 'done' | 'results'
+type Step = 'intro' | 'test' | 'done' | 'saveError' | 'results'
 
 // ─────────────────────────────────────────────
 // Componente principal
@@ -102,6 +102,27 @@ export default function WCSTPage() {
   const [feedbackIdx, setFeedbackIdx] = useState<number | null>(null)
   const [bloqueado, setBloqueado] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [saveError, setSaveError] = useState('')
+
+  const guardarResultado = useCallback((resultados: Metricas) => {
+    setSaveError('')
+    setStep('done')
+    startTransition(async () => {
+      try {
+        const dbResponse = await saveWcstResult(resultados)
+        if (dbResponse?.error) {
+          console.error('Error WCST DB:', dbResponse.error)
+          setSaveError(dbResponse.error)
+          setStep('saveError')
+          return
+        }
+        setTimeout(() => setStep('results'), 1200)
+      } catch {
+        setSaveError('No se pudo contactar el servidor. Inténtalo de nuevo.')
+        setStep('saveError')
+      }
+    })
+  }, [])
 
   // Ref que guarda los valores de juego mutables para que el setTimeout
   // siempre lea los valores más recientes (evita stale closure)
@@ -239,21 +260,13 @@ export default function WCSTPage() {
       const nextEnsayo = juegoRef.current.ensayoActual
       const cats = juegoRef.current.categoriasCompletadas
       if (nextEnsayo >= TOTAL_CARTAS || cats >= MAX_CATEGORIAS) {
-        setStep('done')
-        
-        startTransition(async () => {
-          const dbResponse = await saveWcstResult(nuevasMetricas)
-          if (dbResponse?.error) {
-             console.error("Error WCST DB:", dbResponse.error)
-          }
-          setTimeout(() => setStep('results'), 1200)
-        })
+        guardarResultado(nuevasMetricas)
 
       } else {
         setEnsayoActual(nextEnsayo)
       }
     }, 900)
-  }, [bloqueado, cartaActual, metricas])
+  }, [bloqueado, cartaActual, metricas, guardarResultado])
 
   const progreso = baraja.length > 0 ? (ensayoActual / TOTAL_CARTAS) * 100 : 0
   const pctAciertos = metricas.totalEnsayos > 0 ? Math.round((metricas.totalAciertos / metricas.totalEnsayos) * 100) : 0
@@ -434,6 +447,15 @@ export default function WCSTPage() {
             <p className="text-[#64748b]">
               {isPending ? 'Guardando métricas en la nube...' : 'Calculando resultados...'}
             </p>
+          </div>
+        )}
+
+        {step === 'saveError' && (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] animate-[fadeIn_0.5s_ease-out] text-center">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-[#e2e8f0] mb-2">No se pudo guardar el resultado</h2>
+            <p className="text-[#fca5a5] max-w-lg">{saveError}</p>
+            <button onClick={() => guardarResultado(metricas)} disabled={isPending} className="mt-6 px-5 py-3 rounded-xl font-semibold text-white disabled:opacity-60" style={{ background: '#6c63ff' }}>Reintentar guardar</button>
           </div>
         )}
 

@@ -7,7 +7,7 @@ import { saveFivePointResult, type FivePointDesign } from './actions'
 const POINTS = [[18, 18], [82, 18], [50, 50], [18, 82], [82, 82]] as const
 const TOTAL = 30
 const SECONDS = 180
-type Step = 'intro' | 'test' | 'done'
+type Step = 'intro' | 'test' | 'saving' | 'done' | 'error'
 
 function FivePointFigure({ lines, onAdd, disabled, small = false }: { lines: [number, number][], onAdd?: (point: number) => void, disabled?: boolean, small?: boolean }) {
   const [selected, setSelected] = useState<number | null>(null)
@@ -32,11 +32,24 @@ export default function CincoPuntosPage() {
   const [isPending, startTransition] = useTransition()
   const [comprendioInstruccion, setComprendioInstruccion] = useState<boolean | null>(null)
   const [repitioInstruccion, setRepitioInstruccion] = useState<boolean | null>(null)
+  const [completedDesigns, setCompletedDesigns] = useState<FivePointDesign[]>([])
+  const [saveError, setSaveError] = useState('')
 
   const elapsed = SECONDS - secondsLeft
   const finish = useCallback((finalDesigns: FivePointDesign[]) => {
-    setStep('done')
-    startTransition(() => { saveFivePointResult(finalDesigns, elapsed, comprendioInstruccion, repitioInstruccion) })
+    setCompletedDesigns(finalDesigns)
+    setSaveError('')
+    setStep('saving')
+    startTransition(async () => {
+      try {
+        const result = await saveFivePointResult(finalDesigns, elapsed, comprendioInstruccion, repitioInstruccion)
+        if (result.success) setStep('done')
+        else { setSaveError(result.error ?? 'No fue posible guardar el resultado.'); setStep('error') }
+      } catch {
+        setSaveError('No se pudo contactar el servidor. Inténtalo de nuevo.')
+        setStep('error')
+      }
+    })
   }, [elapsed, comprendioInstruccion, repitioInstruccion])
 
   useEffect(() => {
@@ -94,7 +107,9 @@ export default function CincoPuntosPage() {
         </div>
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mt-5">{Array.from({ length: TOTAL }, (_, i) => <div key={i} className={`aspect-square rounded border text-center text-xs pt-1 ${i < designs.length ? 'border-[#a855f7] text-[#c084fc]' : i === slot ? 'border-[#00d4aa] text-[#00d4aa]' : 'border-[#2a2d3e] text-[#64748b]'}`}>{i + 1}</div>)}</div>
       </>}
-      {step === 'done' && <div className="card max-w-xl text-center mx-auto mt-16"><div className="text-5xl">🎉</div><h1 className="text-2xl font-bold text-white mt-4">¡Terminaste!</h1><p className="text-[#cbd5e1] mt-3">Guardaste {designs.length} figura{designs.length === 1 ? '' : 's'}. Tu docente las revisará.</p><p className="text-sm text-[#94a3b8] mt-3">{isPending ? 'Guardando…' : 'Resultado guardado.'}</p><Link href="/evaluaciones" className="btn-primary inline-block mt-6">Volver a las pruebas</Link></div>}
+      {step === 'saving' && <div className="card max-w-xl text-center mx-auto mt-16"><div className="text-5xl">⏳</div><h1 className="text-2xl font-bold text-white mt-4">Guardando tu resultado</h1><p className="text-[#cbd5e1] mt-3">Estamos registrando las figuras antes de finalizar.</p></div>}
+      {step === 'done' && <div className="card max-w-xl text-center mx-auto mt-16"><div className="text-5xl">🎉</div><h1 className="text-2xl font-bold text-white mt-4">¡Terminaste!</h1><p className="text-[#cbd5e1] mt-3">Guardaste {completedDesigns.length} figura{completedDesigns.length === 1 ? '' : 's'}. Tu docente las revisará.</p><p className="text-sm text-[#94a3b8] mt-3">Resultado guardado.</p><Link href="/evaluaciones" className="btn-primary inline-block mt-6">Volver a las pruebas</Link></div>}
+      {step === 'error' && <div className="card max-w-xl text-center mx-auto mt-16"><div className="text-5xl">⚠️</div><h1 className="text-2xl font-bold text-white mt-4">No se pudo guardar</h1><p className="text-[#fca5a5] mt-3">{saveError}</p><div className="mt-6 flex flex-wrap justify-center gap-3"><button onClick={() => finish(completedDesigns)} disabled={isPending} className="btn-primary bg-[#a855f7] hover:bg-[#9333ea]">Reintentar guardar</button><Link href="/evaluaciones" className="btn-outline inline-block">Volver a las pruebas</Link></div></div>}
     </div>
   </main>
 }

@@ -24,9 +24,13 @@ export default function ConnersTeacherPage() {
     if (!teacher.trim()) { setError('Escribe el nombre del docente que realiza la valoración.'); return }
     if (!complete) { setError('Valora las 10 conductas antes de guardar.'); return }
     startTransition(async () => {
-      const result = await saveConnersTeacherResult({ docente: teacher, curso: course, respuestas: answers, observaciones: notes })
-      if (result.error) setError(result.error)
-      else setStep('done')
+      try {
+        const result = await saveConnersTeacherResult({ docente: teacher, curso: course, respuestas: answers, observaciones: notes })
+        if (result.error) setError(result.error ?? 'No fue posible guardar el registro docente.')
+        else setStep('done')
+      } catch {
+        setError('No se pudo contactar el servidor. Inténtalo de nuevo.')
+      }
     })
   }
 
