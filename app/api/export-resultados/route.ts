@@ -1,6 +1,16 @@
 import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/server'
 
+const AF5_QUESTIONS = [
+  'Hago bien los trabajos escolares.', 'Hago fácilmente amigos.', 'Tengo miedo de algunas cosas.', 'Soy criticado en casa.', 'Me cuido físicamente.', 'Mis profesores me consideran un buen trabajador.', 'Soy una persona amigable.', 'Muchas cosas me ponen nervioso.', 'Me siento feliz en casa.', 'Me buscan para realizar actividades deportivas.', 'Trabajo mucho en clase.', 'Es difícil para mí hacer amigos.', 'Me asusto con facilidad.', 'Mi familia está decepcionada de mí.', 'Me considero elegante.', 'Mis profesores me estiman.', 'Soy una persona alegre.', 'Cuando los mayores me dicen algo me pongo muy nervioso.', 'Mi familia me ayudaría en cualquier tipo de problemas.', 'Me gusta cómo soy físicamente.', 'Soy un buen trabajador.', 'Me cuesta hablar con desconocidos.', 'Me pongo muy nervioso cuando me pregunta el profesor.', 'Mis padres me dan confianza.', 'Soy bueno haciendo deporte.', 'Mis profesores me consideran inteligente y trabajador.', 'Tengo muchos amigos.', 'Me siento nervioso.', 'Me siento querido por mis padres.', 'Soy una persona atractiva.',
+]
+
+const CONNERS_QUESTIONS = [
+  'Tiene excesiva inquietud motora.', 'Tiene explosiones impredecibles de mal genio.', 'Se distrae fácilmente, tiene escasa atención.', 'Molesta frecuentemente a otros niños.', 'Tiene aspecto enfadado, huraño.', 'Cambia bruscamente sus estados de ánimo.', 'Intranquilo, siempre en movimiento.', 'Es impulsivo e irritable.', 'No termina las tareas que empieza.', 'Sus esfuerzos se frustran fácilmente.',
+]
+
+const questionColumn = (number: number, question: string) => `Pregunta ${number}: ${question}`
+
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
@@ -51,11 +61,11 @@ export async function GET() {
   })
   const af5Rows = records(af5).map(record => {
     const answers = record.respuestas || {}
-    return { ...studentFields(record.id_consentimiento), Fecha: record.fecha_evaluacion, Academico_laboral: record.academico_laboral, Social: record.social, Emocional: record.emocional, Familiar: record.familiar, Fisico: record.fisico, ...Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`Item_${index + 1}`, answers[index + 1] ?? ''])) }
+    return { ...studentFields(record.id_consentimiento), Fecha: record.fecha_evaluacion, Academico_laboral: record.academico_laboral, Social: record.social, Emocional: record.emocional, Familiar: record.familiar, Fisico: record.fisico, ...Object.fromEntries(AF5_QUESTIONS.map((question, index) => [questionColumn(index + 1, question), answers[index + 1] ?? ''])) }
   })
   const connersRows = records(conners).map(record => {
     const answers = record.respuestas || {}
-    return { ...studentFields(record.id_consentimiento), Fecha: record.fecha_evaluacion, Docente: record.nombre_docente, Curso: record.curso_observado, Total: record.total, Observaciones: record.observaciones, ...Object.fromEntries(Array.from({ length: 10 }, (_, index) => [`Item_${index + 1}`, answers[index + 1] ?? ''])) }
+    return { ...studentFields(record.id_consentimiento), Fecha: record.fecha_evaluacion, Docente: record.nombre_docente, Curso: record.curso_observado, Total: record.total, Observaciones: record.observaciones, ...Object.fromEntries(CONNERS_QUESTIONS.map((question, index) => [questionColumn(index + 1, question), answers[index + 1] ?? ''])) }
   })
   const summaryRows = [...wcstRows.map(row => ({ ...row, Prueba: 'Wisconsin' })), ...fivePointRows.map(row => ({ ...row, Prueba: 'Cinco puntos' })), ...af5Rows.map(row => ({ ...row, Prueba: 'AF5' })), ...connersRows.map(row => ({ ...row, Prueba: 'Conners docente' }))]
 
