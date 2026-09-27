@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import WCSTCard, { type Carta, type Color, type Forma } from '@/components/WCSTCard'
-import { saveWcstResult } from './actions'
+import { persistEvaluation } from '@/lib/evaluations/client'
 
 // ─────────────────────────────────────────────
 // Configuración del WCST
@@ -109,7 +109,7 @@ export default function WCSTPage() {
     setStep('done')
     startTransition(async () => {
       try {
-        const dbResponse = await saveWcstResult(resultados)
+        const dbResponse = await persistEvaluation('/api/resultados/wcst', resultados)
         if (dbResponse?.error) {
           console.error('Error WCST DB:', dbResponse.error)
           setSaveError(dbResponse.error)

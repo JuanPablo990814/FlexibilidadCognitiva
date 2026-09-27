@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { saveFivePointResult, type FivePointDesign } from './actions'
+import { type FivePointDesign } from './actions'
+import { persistEvaluation } from '@/lib/evaluations/client'
 
 const POINTS = [[18, 18], [82, 18], [50, 50], [18, 82], [82, 82]] as const
 const TOTAL = 30
@@ -42,7 +43,7 @@ export default function CincoPuntosPage() {
     setStep('saving')
     startTransition(async () => {
       try {
-        const result = await saveFivePointResult(finalDesigns, elapsed, comprendioInstruccion, repitioInstruccion)
+        const result = await persistEvaluation('/api/resultados/cinco-puntos', { designs: finalDesigns, elapsedSeconds: elapsed, comprendioInstruccion, repitioInstruccion })
         if (result.success) setStep('done')
         else { setSaveError(result.error ?? 'No fue posible guardar el resultado.'); setStep('error') }
       } catch {

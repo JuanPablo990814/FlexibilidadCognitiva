@@ -33,7 +33,11 @@ export async function updateSession(request: NextRequest) {
 
   // Rutas protegidas: cualquier ruta que NO sea /auth/*
   const isAuthRoute = request.nextUrl.pathname.startsWith('/auth')
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
   if (!isAuthRoute && !user) {
+    if (isApiRoute) {
+      return NextResponse.json({ success: false, error: 'Tu sesión terminó. Inicia sesión nuevamente.' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)

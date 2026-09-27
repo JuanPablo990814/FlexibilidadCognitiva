@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import { saveConnersTeacherResult } from './actions'
+import { persistEvaluation } from '@/lib/evaluations/client'
 
 const ITEMS = [
   'Tiene excesiva inquietud motora.', 'Tiene explosiones impredecibles de mal genio.', 'Se distrae fácilmente, tiene escasa atención.', 'Molesta frecuentemente a otros niños.', 'Tiene aspecto enfadado, huraño.', 'Cambia bruscamente sus estados de ánimo.', 'Intranquilo, siempre en movimiento.', 'Es impulsivo e irritable.', 'No termina las tareas que empieza.', 'Sus esfuerzos se frustran fácilmente.',
@@ -25,8 +25,8 @@ export default function ConnersTeacherPage() {
     if (!complete) { setError('Valora las 10 conductas antes de guardar.'); return }
     startTransition(async () => {
       try {
-        const result = await saveConnersTeacherResult({ docente: teacher, curso: course, respuestas: answers, observaciones: notes })
-        if (result.error) setError(result.error ?? 'No fue posible guardar el registro docente.')
+        const result = await persistEvaluation('/api/resultados/conners', { docente: teacher, curso: course, respuestas: answers, observaciones: notes })
+        if (!result.success) setError(result.error ?? 'No fue posible guardar el registro docente.')
         else setStep('done')
       } catch {
         setError('No se pudo contactar el servidor. Inténtalo de nuevo.')
