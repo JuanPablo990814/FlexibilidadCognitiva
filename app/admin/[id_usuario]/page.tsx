@@ -31,11 +31,7 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
   // Si no hay expediente, o falla el RLS del admin, retorna error
   if (error || !expediente) {
     return (
-      <div className="min-h-screen py-10 px-6 max-w-4xl mx-auto text-center">
-        <h1 className="text-2xl text-red-500 mb-4">Expediente inaccesible</h1>
-        <p className="text-[#64748b] mb-6">No se encontró el alumno o no tienes permisos de nivel maestro.</p>
-        <Link href="/admin" className="btn-primary">Volver al Dashboard</Link>
-      </div>
+      <main className="site-shell clinical-page px-6 py-16"><div className="site-card max-w-xl mx-auto text-center"><h1 className="text-2xl font-semibold text-[#9b3123] mb-3">Expediente inaccesible</h1><p className="site-copy mb-6">No se encontró el estudiante o no tienes permisos para ver su expediente.</p><Link href="/admin" className="site-button">Volver al panel</Link></div></main>
     )
   }
 
@@ -61,54 +57,32 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
   ].sort((a, b) => new Date(b.fecha_evaluacion).getTime() - new Date(a.fecha_evaluacion).getTime())
 
   return (
-    <div className="min-h-screen py-10 px-6">
-      <div className="max-w-5xl mx-auto">
-        
-        {/* Cabecera y Navegación */}
-        <div className="flex items-center justify-between mb-8 animate-[slideUp_0.4s_ease-out]">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-[#6c63ff]/20 text-[#6c63ff] px-2 py-1 rounded text-xs font-bold uppercase border border-[#6c63ff]/40">Expediente Clínico</span>
-            </div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">{expediente.nombre_estudiante}</h1>
-            <p className="text-[#64748b]">Ficha Individual de Resultados</p>
-          </div>
-          <Link href="/admin" className="btn-ghost border border-[#2a2d3e]">
-            ← Volver a General
-          </Link>
-        </div>
-
+    <main className="site-shell clinical-page">
+      <section className="site-hero px-6 py-7"><div className="max-w-5xl mx-auto"><header className="site-nav"><div className="brand-lockup"><span className="brand-dot" />Panel investigador</div><Link href="/admin" className="nav-pill bg-white/70">← Volver al panel</Link></header><div className="mt-12 mb-3"><p className="site-eyebrow">Expediente clínico</p><h1 className="display-title display-title--small mt-3">{expediente.nombre_estudiante}</h1><p className="site-copy text-lg mt-4">Ficha individual de resultados y seguimiento de evaluaciones.</p></div></div></section>
+      <section className="max-w-5xl mx-auto px-6 py-10">
         {/* Sección de Datos Personales */}
-        <div className="card mb-8 grid grid-cols-1 md:grid-cols-3 gap-6 bg-gradient-to-tr from-[#1a1d2e] to-[#252841] border-[#2a2d3e] animate-[fadeIn_0.5s_ease-out]">
+        <div className="site-card clinical-summary mb-8 grid grid-cols-1 md:grid-cols-3 gap-6 animate-[fadeIn_0.5s_ease-out]">
           <div>
-            <p className="text-xs text-[#64748b] uppercase tracking-wider mb-1">Acudiente Legal</p>
-            <p className="text-[#e2e8f0] font-semibold">{expediente.nombre_padre}</p>
-            <p className="text-xs text-[#64748b]">C.C {expediente.cedula_padre} ({expediente.lugar_expedicion_padre})</p>
+            <p className="clinical-label">Acudiente legal</p><p className="clinical-value">{expediente.nombre_padre}</p><p className="clinical-muted">C.C. {expediente.cedula_padre} ({expediente.lugar_expedicion_padre})</p>
           </div>
-          <div className="border-l border-[#2a2d3e] pl-6">
-            <p className="text-xs text-[#64748b] uppercase tracking-wider mb-1">Datos del Estudiante</p>
-            <p className="text-[#e2e8f0] font-semibold">{expediente.nombre_estudiante}</p>
-            <p className="text-xs text-[#64748b] mb-1">T.I. {expediente.tarjeta_identidad_estudiante}</p>
+          <div className="clinical-divider pl-6"><p className="clinical-label">Datos del estudiante</p><p className="clinical-value">{expediente.nombre_estudiante}</p><p className="clinical-muted mb-1">T.I. {expediente.tarjeta_identidad_estudiante}</p>
             {expediente.edad_estudiante && (
-              <span className="px-2 py-0.5 bg-[#6c63ff]/10 text-[#6c63ff] rounded font-bold text-xs border border-[#6c63ff]/20">
+              <span className="clinical-chip">
                 {expediente.edad_estudiante} años
               </span>
             )}
           </div>
-          <div className="border-l border-[#2a2d3e] pl-6">
-            <p className="text-xs text-[#64748b] uppercase tracking-wider mb-1">Cursos Institucionales</p>
+          <div className="clinical-divider pl-6"><p className="clinical-label">Cursos institucionales</p>
             <div className="flex gap-2 mt-1">
-              <span className="px-3 py-1 bg-[#2a2d3e] rounded-md text-xs font-mono text-[#00d4aa]">Grado: {expediente.grado_estudiante}</span>
-              <span className="px-3 py-1 bg-[#2a2d3e] rounded-md text-xs font-mono text-[#6c63ff]">Grupo: {expediente.grupo_estudiante}</span>
+              <span className="clinical-chip">Grado: {expediente.grado_estudiante}</span><span className="clinical-chip">Grupo: {expediente.grupo_estudiante}</span>
             </div>
           </div>
         </div>
 
-        <h2 className="text-xl font-semibold text-[#e2e8f0] mb-6 border-b border-[#2a2d3e] pb-2">Historial de Ejecuciones ({resultados.length})</h2>
+        <h2 className="clinical-history-title">Historial de evaluaciones <span>{resultados.length}</span></h2>
 
         {(!resultados || resultados.length === 0) ? (
-          <div className="card text-center py-12 bg-[#1a1d2e]/50 border-dashed">
-            <p className="text-[#64748b]">El estudiante aún no registra ninguna prueba salvada.</p>
+          <div className="site-card text-center py-12 border-dashed"><p className="site-copy">El estudiante aún no registra ninguna prueba guardada.</p>
           </div>
         ) : (
           <div className="space-y-6 animate-[slideUp_0.6s_ease-out]">
@@ -267,7 +241,7 @@ export default async function ExpedientePage({ params }: { params: { id_usuario:
           </div>
         )}
 
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }

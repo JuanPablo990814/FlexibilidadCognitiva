@@ -59,6 +59,21 @@ body {
 .active-student__name { color: var(--ink); font-size: clamp(1.35rem, 3vw, 2rem); line-height: 1; font-weight: 700; letter-spacing: -.045em; }
 .test-complete { display: inline-flex; align-items: center; gap: .3rem; padding: .38rem .62rem; border-radius: 999px; background: #dcf5e6; color: #17673d; font-size: .72rem; font-weight: 700; }
 
+/* El expediente conserva los componentes de análisis, pero usa la paleta editorial vigente. */
+.clinical-page .card { background: rgba(255,255,255,.78); border-color: var(--line); box-shadow: 0 12px 35px rgba(39,55,58,.07); }
+.clinical-page .text-white, .clinical-page .text-\[\#e2e8f0\] { color: var(--ink) !important; }
+.clinical-page .text-\[\#64748b\], .clinical-page .text-\[\#94a3b8\] { color: var(--muted) !important; }
+.clinical-page .bg-\[\#1a1d2e\], .clinical-page .bg-\[\#11131b\], .clinical-page .bg-\[\#252841\] { background: #f6f7f5 !important; border-color: var(--line) !important; }
+.clinical-page .border-\[\#2a2d3e\] { border-color: var(--line) !important; }
+.clinical-label { color: #50686c; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: .3rem; }
+.clinical-value { color: var(--ink); font-weight: 700; }
+.clinical-muted { color: var(--muted); font-size: .78rem; }
+.clinical-divider { border-left: 1px solid var(--line); }
+.clinical-chip { display: inline-flex; border: 1px solid var(--line); border-radius: .55rem; padding: .35rem .6rem; color: var(--ink); background: #f6f7f5; font-size: .75rem; font-weight: 700; }
+.clinical-history-title { display: flex; align-items: center; gap: .65rem; margin: 0 0 1.5rem; padding-bottom: .75rem; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 1.25rem; font-weight: 700; }
+.clinical-history-title span { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; border-radius: 999px; background: var(--lilac); color: var(--accent); font-size: .72rem; }
+@media (max-width: 767px) { .clinical-divider { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 1.25rem; } }
+
 @layer components {
   .card {
     @apply bg-[#1a1d2e] border border-[#2a2d3e] rounded-2xl p-6;
