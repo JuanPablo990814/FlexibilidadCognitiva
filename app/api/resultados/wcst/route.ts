@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'edge'
 
 export async function POST(request: Request) {
   const metricas = await request.json().catch(() => null)
