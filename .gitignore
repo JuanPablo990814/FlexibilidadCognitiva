@@ -31,3 +31,5 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+# Local development server logs
+next-dev*.log
