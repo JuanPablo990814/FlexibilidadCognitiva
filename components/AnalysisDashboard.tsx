@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import GroupComparisonChart from './GroupComparisonChart'
+import { REVIEW_GROUP } from '@/lib/school-group'
 import { AnalysisData, LABELS, METRICS, Observation, statistics, TESTS, Test } from '@/lib/analysis'
 
 const format = (n: number | null) => n === null ? '—' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 })
@@ -12,20 +14,20 @@ export default function AnalysisDashboard({ data }: { data: AnalysisData }) {
   const [metric, setMetric] = useState(METRICS.wcst[0][0])
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
-  const groups = useMemo(() => Array.from(new Set(['4.1', '4.2', '4.3', '4.4', '4.5', ...data.subjects.map(s => s.group)])).sort((a, b) => a.localeCompare(b, 'es', { numeric: true })), [data])
-  const subjects = data.subjects.filter(s => group === 'todos' || s.group === group)
-  const observations = data.observations.filter(r => group === 'todos' || r.group === group)
+  const groups = ['4.1', '4.2', '4.3', '4.4', '4.5']
+  const subjects = data.subjects.filter(s => group === 'todos' || s.group === group || (group === REVIEW_GROUP && s.group === REVIEW_GROUP))
+  const observations = data.observations.filter(r => group === 'todos' || r.group === group || (group === REVIEW_GROUP && r.group === REVIEW_GROUP))
   const current = observations.filter(r => r.test === test)
   const filtered = current.filter(r => r.subject.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
   const pages = Math.max(1, Math.ceil(filtered.length / 25))
   const currentPage = Math.min(page, pages - 1)
   const visible = filtered.slice(currentPage * 25, (currentPage + 1) * 25)
-  const displayedGroups = group === 'todos' ? groups : [group]
+  const displayedGroups = group === 'todos' || group === REVIEW_GROUP ? groups : [group]
   const alerts = data.alerts.filter(a => group === 'todos' || a.group === group || a.subject === 'Sin asignar')
   const complete = subjects.filter(s => TESTS.every(t => observations.some(r => r.subject === s.code && r.test === t))).length
   const metricLabel = METRICS[test].find(([key]) => key === metric)?.[1] ?? ''
   const groupStats = displayedGroups.map(g => ({ group: g, ...statistics(current.filter(r => r.group === g).map(r => r.values[metric])) }))
-  const scale = Math.max(1, ...groupStats.map(s => s.mean ?? 0))
+  const ungrouped = data.subjects.filter(s => !groups.includes(s.group)).length
 
   function exportCsv() {
     const rows: (string | number | null)[][] = [
@@ -44,15 +46,15 @@ export default function AnalysisDashboard({ data }: { data: AnalysisData }) {
   }
 
   return <section className="max-w-7xl mx-auto px-6 py-10 space-y-8 analysis-dashboard">
-    <div className="flex flex-wrap items-end justify-between gap-4"><label className="grid gap-2 font-semibold">Grupo<select aria-label="Grupo" className="analysis-input" value={group} onChange={e => { setGroup(e.target.value); setPage(0) }}><option value="todos">Todos los grupos</option>{groups.map(g => <option key={g}>{g}</option>)}</select></label><button className="site-button" onClick={exportCsv}>Descargar análisis anónimo (CSV)</button></div>
-    <p className="site-copy text-sm">Se incluye el intento más reciente de cada prueba por estudiante, según su fecha. Los códigos de sujeto se asignan por grupo sin mostrar nombres. Los datos disponibles corresponden al alcance de lectura de tu cuenta.</p>
-    <div className="grid sm:grid-cols-3 gap-4" aria-live="polite"><Summary label="Sujetos registrados" value={subjects.length} /><Summary label="Resultados seleccionados" value={observations.length} /><Summary label="Con las cinco pruebas" value={complete} /></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><label className="grid gap-2 font-semibold">Grupo<select aria-label="Grupo" className="analysis-input" value={group} onChange={e => { setGroup(e.target.value); setPage(0) }}><option value="todos">Todos (comparación de cuarto)</option><option value={REVIEW_GROUP}>Por revisar</option>{groups.map(g => <option key={g}>{g}</option>)}</select></label><div className="flex flex-wrap gap-3"><a href="/api/informe-analisis" className="site-button">Descargar informe completo en PDF</a><button className="site-button site-button--light" onClick={exportCsv}>Descargar análisis anónimo (CSV)</button></div></div>
+    <p className="site-copy text-sm">Se incluye el intento completo más reciente de cada prueba. Cada participante conserva el mismo código en todas las pruebas de este análisis. Las evaluaciones incompletas o pendientes de calificación se excluyen de las tablas, gráficas y descarga. El PDF incluye a todos los participantes accesibles con esta sesión, conserva los campos sin completar y reúne el análisis cuantitativo y la interpretación; no depende del filtro de esta pantalla.</p>
+    <div className="grid sm:grid-cols-3 gap-4" aria-live="polite"><Summary label="Participantes registrados" value={subjects.length} /><Summary label="Evaluaciones completas" value={observations.length} /><Summary label="Con las cinco pruebas" value={complete} /></div>
 
-    <section aria-labelledby="coverage-title"><h2 id="coverage-title" className="text-2xl font-semibold mb-4">Resumen de todos los exámenes</h2><p className="site-copy text-sm mb-4">Cobertura y resultados principales en sus unidades originales. No se calcula una puntuación global entre pruebas.</p><Table caption="Cobertura y resultado principal por examen" headers={['Prueba', 'Evaluados / registrados', 'Cobertura', 'Indicador principal', 'N válido', 'Media']} rows={TESTS.map(t => { const records = observations.filter(r => r.test === t); const [key, label] = METRICS[t][0]; const stats = statistics(records.map(r => r.values[key])); return [LABELS[t], `${records.length} / ${subjects.length}`, subjects.length ? `${format(records.length / subjects.length * 100)} %` : '—', label, stats.n, format(stats.mean)] })} /></section>
+    {ungrouped > 0 && <p className="group-review-note" role="status">{ungrouped} participantes tienen un grupo por revisar o pertenecen a otros grados. Sus evaluaciones completas aparecen en el resumen general; se excluyen de las comparaciones entre grupos para evitar categorías incorrectas.</p>}<section aria-labelledby="coverage-title"><h2 id="coverage-title" className="text-2xl font-semibold mb-4">Resumen de todos los exámenes</h2><p className="site-copy text-sm mb-4">Cobertura y resultados principales en sus unidades originales. No se calcula una puntuación global entre pruebas.</p><Table caption="Cobertura y resultado principal por examen" headers={['Prueba', 'Evaluados / registrados', 'Cobertura', 'Indicador principal', 'N válido', 'Media']} rows={TESTS.map(t => { const records = observations.filter(r => r.test === t); const [key, label] = METRICS[t][0]; const stats = statistics(records.map(r => r.values[key])); return [LABELS[t], `${records.length} / ${subjects.length}`, subjects.length ? `${format(records.length / subjects.length * 100)} %` : '—', label, stats.n, format(stats.mean)] })} /></section>
 
     <section aria-labelledby="detail-title"><h2 id="detail-title" className="text-2xl font-semibold mb-4">Explorar resultados por prueba</h2><div className="flex flex-wrap gap-2" role="group" aria-label="Prueba a analizar">{TESTS.map(t => <button key={t} aria-pressed={test === t} onClick={() => { setTest(t); setMetric(METRICS[t][0][0]); setPage(0); setSearch('') }} className={`site-button ${test === t ? '' : 'site-button--light'}`}>{LABELS[t]}</button>)}</div><p className="site-copy mt-4 text-sm">{test === 'wcst' ? 'Porcentajes de aciertos y errores sobre los ensayos; proporción perseverativa sobre el total de errores. Un denominador cero se muestra como dato no calculable.' : test === 'cinco' ? 'Los diseños únicos, repetidos y errores de regla solo se calculan cuando la clasificación de todas las figuras está completa. Diversidad = diseños únicos / diseños totales × 100.' : test === 'af5' ? 'Se conservan las cinco dimensiones almacenadas de AF5, en la escala 0–99 de esta aplicación. No se suman ni se convierten en percentiles.' : test === 'conners' ? 'La aplicación utiliza un cuestionario docente de 10 ítems y un total de 0–30. No almacena subescalas; no se infieren dimensiones ni niveles clínicos.' : 'Se presentan las cuatro subescalas guardadas. Los registros históricos ligados solo a una cuenta se asignan únicamente si tiene un estudiante.'}</p></section>
 
-    <div className="site-card space-y-5"><label className="grid gap-2 font-semibold max-w-md">Indicador para comparar<select aria-label="Indicador para comparar" className="analysis-input" value={metric} onChange={e => setMetric(e.target.value)}>{METRICS[test].map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><figure><figcaption className="font-semibold mb-4">{LABELS[test]} · Media de {metricLabel.toLocaleLowerCase()} por grupo</figcaption><div className="space-y-4">{groupStats.map(s => <div key={s.group} className="grid grid-cols-[3rem_1fr_8rem] gap-3 items-center text-sm"><span>{s.group}</span><div className="h-6 rounded bg-[var(--paper)] overflow-hidden" aria-hidden="true"><div className="h-full rounded bg-[var(--accent)]" style={{ width: `${(s.mean ?? 0) / scale * 100}%` }} /></div><span className="text-right">{s.mean === null ? 'Sin datos' : `${format(s.mean)} · n=${s.n}`}</span></div>)}</div></figure><Table caption={`Estadísticos de ${metricLabel} por grupo`} headers={['Grupo', 'N válido', 'Media', 'Mediana', 'DE muestral', 'Mínimo', 'Máximo']} rows={groupStats.map(s => [s.group, s.n, format(s.mean), format(s.median), format(s.sd), format(s.min), format(s.max)])} /></div>
+    <div className="site-card space-y-5"><label className="grid gap-2 font-semibold max-w-md">¿Qué resultado quieres comparar?<select aria-label="¿Qué resultado quieres comparar?" className="analysis-input" value={metric} onChange={e => setMetric(e.target.value)}>{METRICS[test].map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><GroupComparisonChart stats={groupStats} test={test} metric={metric} label={metricLabel} /><details className="chart-details"><summary>Ver tabla de promedios y dispersión</summary><Table caption={`Estadísticos de ${metricLabel} por grupo`} headers={['Grupo', 'N válido', 'Media', 'Mediana', 'DE muestral', 'Mínimo', 'Máximo']} rows={groupStats.map(s => [s.group, s.n, format(s.mean), format(s.median), format(s.sd), format(s.min), format(s.max)])} /></details></div>
 
     <section><h2 className="text-2xl font-semibold mb-4">Comparación de indicadores entre grupos</h2><Table caption={`${LABELS[test]}: medias y cantidad de valores válidos por indicador`} headers={['Indicador', ...displayedGroups]} rows={METRICS[test].map(([key, label]) => [label, ...displayedGroups.map(g => { const s = statistics(current.filter(r => r.group === g).map(r => r.values[key])); return s.n ? `${format(s.mean)} (n=${s.n})` : 'Sin datos' })])} /></section>
 

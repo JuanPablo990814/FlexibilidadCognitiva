@@ -5,7 +5,10 @@ const path = require('node:path')
 const ts = require('typescript')
 const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../lib/analysis.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
 const compiled = { exports: {} }
-new Function('exports', 'module', code)(compiled.exports, compiled)
+const groupCode = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../lib/school-group.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
+const groupsModule = { exports: {} }
+new Function('exports', 'module', groupCode)(groupsModule.exports, groupsModule)
+new Function('exports', 'module', 'require', code)(compiled.exports, compiled, () => groupsModule.exports)
 const { buildAnalysis, statistics, numeric, groupOf } = compiled.exports
 const student = (id, user = 'u') => ({ id_consentimiento: id, id_usuario: user, nombre_estudiante: `Privado ${id}`, grupo_estudiante: '1', grado_estudiante: '4°' })
 const empty = () => ({ wcst: [], cinco: [], af5: [], conners: [], car: [] })
@@ -23,12 +26,38 @@ test('groups are normalized without repeating the grade', () => {
   assert.equal(groupOf(student('s')), '4.1')
   assert.equal(groupOf({ grupo_estudiante: '4,2', grado_estudiante: '4' }), '4.2')
 })
+
+test('free-text school groups are normalized only when unambiguous', () => {
+  for (const value of ['1', '01', '4.1', '4,1', '4-1', '401', '41', 'Grupo 4.1']) {
+    assert.equal(groupOf({ grado_estudiante: 'Cuarto', grupo_estudiante: value }), '4.1')
+  }
+  for (const value of ['A', 'texto libre', '4.8', '', '5.1']) {
+    assert.equal(groupOf({ grado_estudiante: '4', grupo_estudiante: value }), 'Por revisar')
+  }
+})
+
+test('quick registration N/A documents do not mark different children as duplicates', () => {
+  const data = buildAnalysis([{ ...student('s'), tarjeta_identidad_estudiante: 'N/A' }, { ...student('s2'), tarjeta_identidad_estudiante: 'N/A' }], empty())
+  assert.ok(!data.alerts.some(a => a.message.includes('duplicada')))
+})
+
+test('one participant keeps the same subject code across tests and interrupted Wisconsin is excluded', () => {
+  const records = empty()
+  records.car = [record({ metas: 18, perseverancia: 12, toma_decisiones: 10, aprendizaje_errores: 15 })]
+  records.conners = [record({ total: 10, respuestas: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, 1])) })]
+  records.wcst = [record({ total_ensayos: 10, categorias_completadas: 1, historial: Array.from({ length: 10 }, () => ({ correcto: true })) })]
+  const data = buildAnalysis([student('s')], records)
+  assert.equal(data.observations.length, 2)
+  assert.equal(new Set(data.observations.map(r => r.subject)).size, 1)
+  assert.equal(data.observations[0].subject, data.subjects[0].code)
+  assert.ok(data.alerts.some(a => a.message.includes('Wisconsin: evaluaciones incompletas')))
+})
 test('selects latest attempt once and calculates Wisconsin percentages using distinct denominators', () => {
   const records = empty()
-  records.wcst = [record({ fecha_evaluacion: '2026-10-01', categorias_completadas: 1 }), record({ id_resultado: 'new', total_ensayos: 10, total_aciertos: 6, total_errores: 4, errores_perseverativos: 3, errores_no_perseverativos: 1, categorias_completadas: 2, fallos_al_mantener: 0 })]
+  records.wcst = [record({ fecha_evaluacion: '2026-10-01', total_ensayos: 64, historial: Array.from({ length: 64 }, () => ({ correcto: true })) }), record({ id_resultado: 'new', total_ensayos: 10, total_aciertos: 6, total_errores: 4, errores_perseverativos: 3, errores_no_perseverativos: 1, categorias_completadas: 6, fallos_al_mantener: 0, historial: Array.from({ length: 10 }, () => ({ correcto: true })) })]
   const data = buildAnalysis([student('s')], records)
   assert.equal(data.observations.length, 1)
-  assert.equal(data.observations[0].values.categorias_completadas, 2)
+  assert.equal(data.observations[0].values.categorias_completadas, 6)
   assert.equal(data.observations[0].values.aciertos_pct, 60)
   assert.equal(data.observations[0].values.perseveracion_pct, 75)
   assert.match(data.alerts[0].message, /2 intentos/)
@@ -37,16 +66,13 @@ test('selects latest attempt once and calculates Wisconsin percentages using dis
 test('unfinished Five Points classifications are not reported as zero errors or unique designs', () => {
   const records = empty()
   records.cinco = [record({ figuras_completadas: 3, tiempo_segundos: 60, evaluacion: ['unico', 'pendiente', 'repetido'] })]
-  const result = buildAnalysis([student('s')], records).observations[0]
-  assert.equal(result.values.unicos, null)
-  assert.equal(result.values.infracciones, null)
-  assert.equal(result.values.figuras_completadas, 3)
+  assert.equal(buildAnalysis([student('s')], records).observations.length, 0)
   records.cinco[0].evaluacion = ['unico', 'repetido', 'infraccion']
   assert.equal(buildAnalysis([student('s')], records).observations[0].values.infracciones, 1)
 })
 test('ambiguous account-level CAR results cannot be assigned to one of several children', () => {
   const records = empty()
-  records.car = [record({ id_consentimiento: null, id_usuario: 'u', metas: 18 })]
+  records.car = [record({ id_consentimiento: null, id_usuario: 'u', metas: 18, perseverancia: 12, toma_decisiones: 10, aprendizaje_errores: 15 })]
   const ambiguous = buildAnalysis([student('s'), student('s2')], records)
   assert.equal(ambiguous.observations.length, 0)
   assert.match(ambiguous.alerts[0].message, /sin estudiante identificable/)
@@ -54,11 +80,11 @@ test('ambiguous account-level CAR results cannot be assigned to one of several c
 })
 test('flags duplicate consent forms, inconsistent trials, and excludes out-of-range Conners', () => {
   const records = empty()
-  records.conners = [record({ total: 31 })]
+  records.conners = [record({ total: 31, respuestas: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, 3])) })]
   records.wcst = [record({ total_ensayos: 64, total_aciertos: 40, total_errores: 20 })]
   const a = student('s'); const b = { ...student('s2'), nombre_estudiante: a.nombre_estudiante }
   const data = buildAnalysis([a, b], records)
   assert.ok(data.alerts.some(a => a.message.includes('duplicada')))
-  assert.ok(data.alerts.some(a => a.message.includes('no coinciden')))
+  assert.ok(data.alerts.some(a => a.message.includes('incompleta')))
   assert.equal(data.observations.find(r => r.test === 'conners').values.total, null)
 })

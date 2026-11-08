@@ -32,11 +32,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
             style={{ background: 'linear-gradient(135deg, #6c63ff22, #00d4aa22)', border: '1px solid #6c63ff44' }}>
-            <svg className="w-10 h-10" viewBox="0 0 40 40" fill="none">
-              <circle cx="20" cy="16" r="8" stroke="#6c63ff" strokeWidth="2" />
-              <path d="M12 16 Q14 22 20 24 Q26 22 28 16" stroke="#00d4aa" strokeWidth="2" fill="none" />
-              <path d="M8 32 Q14 26 20 28 Q26 26 32 32" stroke="#6c63ff" strokeWidth="2" fill="none" strokeLinecap="round" />
-            </svg>
+            <img src="/logo.svg" width="80" height="80" alt="Flexibilidad Cognitiva" className="w-20 h-20" />
           </div>
           <h1 className="text-3xl font-bold gradient-text mb-2">Flexibilidad Cognitiva</h1>
           <p className="text-[#64748b] text-sm">Plataforma de evaluación neuropsicológica</p>

@@ -1,9 +1,10 @@
+import { schoolGroup, REVIEW_GROUP } from './school-group'
 export type DataRow = Record<string, unknown>
 export const TESTS = ['wcst', 'cinco', 'af5', 'conners', 'car'] as const
 export type Test = typeof TESTS[number]
 export const LABELS: Record<Test, string> = { wcst: 'Wisconsin', cinco: 'Cinco Puntos', af5: 'AF5', conners: 'Conners docente', car: 'Autorregulación Cognitiva' }
 export const METRICS: Record<Test, [string, string][]> = {
-  wcst: [['categorias_completadas', 'Categorías'], ['total_aciertos', 'Aciertos'], ['total_errores', 'Errores'], ['errores_perseverativos', 'Errores perseverativos'], ['errores_no_perseverativos', 'Errores no perseverativos'], ['fallos_al_mantener', 'Fallos de mantenimiento'], ['aciertos_pct', 'Aciertos (%)'], ['errores_pct', 'Errores (%)'], ['perseveracion_pct', 'Perseverativos / errores (%)']],
+  wcst: [['categorias_completadas', 'Criterios completados (0–6)'], ['total_aciertos', 'Aciertos'], ['total_errores', 'Errores'], ['errores_perseverativos', 'Errores perseverativos'], ['errores_no_perseverativos', 'Errores no perseverativos'], ['fallos_al_mantener', 'Fallos de mantenimiento'], ['aciertos_pct', 'Aciertos (%)'], ['errores_pct', 'Errores (%)'], ['perseveracion_pct', 'Perseverativos / errores (%)']],
   cinco: [['figuras_completadas', 'Diseños totales'], ['unicos', 'Diseños únicos'], ['repetidos', 'Repeticiones'], ['infracciones', 'Errores de regla'], ['tiempo_segundos', 'Tiempo (s)'], ['diversidad_pct', 'Diseños únicos (%)']],
   af5: [['academico_laboral', 'Académico laboral'], ['social', 'Social'], ['emocional', 'Emocional'], ['familiar', 'Familiar'], ['fisico', 'Físico']],
   conners: [['total', 'Puntuación total (0–30)']],
@@ -11,7 +12,7 @@ export const METRICS: Record<Test, [string, string][]> = {
 }
 export type Trial = { rule: string; correct: boolean | null; perseverative: boolean }
 export type Observation = { subject: string; group: string; test: Test; date: string; values: Record<string, number | null>; trials: Trial[]; notes: string[] }
-export type AnalysisData = { subjects: { code: string; group: string }[]; observations: Observation[]; alerts: { subject: string; group: string; message: string }[] }
+export type AnalysisData = { subjects: { code: string; group: string; sex?: string; number?: number; isTest?: boolean }[]; observations: Observation[]; alerts: { subject: string; group: string; message: string }[] }
 export function numeric(value: unknown): number | null {
   if (typeof value !== 'number' && typeof value !== 'string') return null
   if (typeof value === 'string' && !value.trim()) return null
@@ -26,11 +27,15 @@ export function statistics(values: (number | null)[]) {
   return { n, mean, median: (sorted[Math.floor((n - 1) / 2)] + sorted[Math.floor(n / 2)]) / 2, sd: n > 1 ? Math.sqrt(sorted.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (n - 1)) : null, min: sorted[0], max: sorted[n - 1] }
 }
 export function groupOf(student: DataRow) {
-  const grade = String(student.grado_estudiante ?? '').trim().replace(/°|º/g, '')
-  const group = String(student.grupo_estudiante ?? '').trim().replace(',', '.')
-  return group.includes('.') ? group : grade && group ? `${grade}.${group}` : 'Sin grupo'
+  return schoolGroup(student.grado_estudiante, student.grupo_estudiante)
 }
 const ratio = (a: number | null, b: number | null) => a !== null && b !== null && b > 0 ? a / b * 100 : null
+function completeAnswers(value: unknown, count: number, min: number, max: number) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const answers = value as DataRow
+  return Array.from({ length: count }, (_, i) => numeric(answers[String(i + 1)]))
+    .every(answer => answer !== null && Number.isInteger(answer) && answer >= min && answer <= max)
+}
 export function buildAnalysis(students: DataRow[], records: Record<Test, DataRow[]>): AnalysisData {
   const output: AnalysisData = { subjects: [], observations: [], alerts: [] }
   const byId = new Map<string, { code: string; group: string }>()
@@ -44,26 +49,30 @@ export function buildAnalysis(students: DataRow[], records: Record<Test, DataRow
     const subject = { code: `${group}-S${String(count).padStart(3, '0')}`, group }
     const id = String(student.id_consentimiento)
     byId.set(id, subject)
-    output.subjects.push(subject)
+    const rawSex = String(student.sexo ?? '').trim().toLocaleLowerCase()
+    const sex = ['f', 'femenino', 'mujer'].includes(rawSex) ? 'Femenino' : ['m', 'masculino', 'hombre'].includes(rawSex) ? 'Masculino' : 'Sin dato'
+    output.subjects.push({ ...subject, sex, number: output.subjects.length + 1, isTest: /\b(prueba|test|codex)\b/i.test(String(student.nombre_estudiante ?? '')) })
+    if (group === REVIEW_GROUP) output.alerts.push({ subject: subject.code, group, message: 'Grado o grupo ambiguo. Se incluye en el resumen general, pero no en la comparación de grupos hasta corregir su ficha.' })
     const userId = String(student.id_usuario)
     byUser.set(userId, [...(byUser.get(userId) ?? []), id])
-    const identity = String(student.tarjeta_identidad_estudiante ?? '').trim() || [student.nombre_estudiante, group].map(v => String(v ?? '').trim().toLocaleLowerCase()).join('|')
+    const document = String(student.tarjeta_identidad_estudiante ?? '').trim()
+    const identity = document && !/^(n\/?a|sin dato|no aplica)$/i.test(document) ? document : [student.nombre_estudiante, group].map(v => String(v ?? '').trim().toLocaleLowerCase()).join('|')
     if (identities.has(identity)) output.alerts.push({ subject: subject.code, group, message: `Posible ficha duplicada con ${identities.get(identity)}. Verificar antes de interpretar.` })
     identities.set(identity, subject.code)
   }
   for (const test of TESTS) {
     const attempts = new Map<string, DataRow[]>()
+    const incompleteByGroup = new Map<string, number>()
     for (const record of records[test]) {
       const complete = test === 'wcst'
-        ? typeof record.total_ensayos === 'number' && record.total_ensayos > 0 && Array.isArray(record.historial) && record.historial.length === record.total_ensayos
+        ? typeof record.total_ensayos === 'number' && record.total_ensayos > 0 && (record.total_ensayos === 64 || record.categorias_completadas === 6) && Array.isArray(record.historial) && record.historial.length === record.total_ensayos
         : test === 'af5'
-          ? record.respuestas != null && Object.keys(record.respuestas as object).length === 30
+          ? completeAnswers(record.respuestas, 30, 1, 99)
           : test === 'conners'
-            ? record.respuestas != null && Object.keys(record.respuestas as object).length === 10
+            ? completeAnswers(record.respuestas, 10, 0, 3)
             : test === 'car'
               ? METRICS.car.every(([key]) => numeric(record[key]) !== null)
               : record.figuras_completadas != null && Array.isArray(record.evaluacion) && record.evaluacion.length === Number(record.figuras_completadas) && record.evaluacion.every(v => ['unico', 'repetido', 'infraccion'].includes(String(v)))
-      if (!complete) continue
       let id = String(record.id_consentimiento ?? '')
       if (!id && test === 'car') {
         const candidates = byUser.get(String(record.id_usuario)) ?? []
@@ -74,7 +83,14 @@ export function buildAnalysis(students: DataRow[], records: Record<Test, DataRow
         output.alerts.push({ subject: 'Sin asignar', group: 'Sin grupo', message: `${LABELS[test]}: registro sin estudiante identificable; excluido del análisis.` })
         continue
       }
+      if (!complete) {
+        incompleteByGroup.set(subject.group, (incompleteByGroup.get(subject.group) ?? 0) + 1)
+        continue
+      }
       attempts.set(id, [...(attempts.get(id) ?? []), record])
+    }
+    for (const [schoolGroup, count] of Array.from(incompleteByGroup.entries())) {
+      output.alerts.push({ subject: `${count} registros`, group: schoolGroup, message: `${LABELS[test]}: evaluaciones incompletas o pendientes de calificación excluidas.` })
     }
     for (const [id, rows] of Array.from(attempts.entries())) {
       const subject = byId.get(id)!

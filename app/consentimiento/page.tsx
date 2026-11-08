@@ -60,11 +60,11 @@ export default async function ConsentimientoPage({ searchParams }: { searchParam
                 </div>
                 <div>
                   <label className="block text-xs text-[#00d4aa] uppercase font-bold mb-2">Grado</label>
-                  <input type="text" name="grado_estudiante" required placeholder="Ej. 5°" className="w-full bg-[#1a1d2e] border border-[#2a2d3e] rounded p-3 text-sm focus:border-[#00d4aa] outline-none" />
+                  <select aria-label="Grado" name="grado_estudiante" required defaultValue="" className="input-field"><option value="" disabled>Selecciona el grado</option>{Array.from({ length: 11 }, (_, i) => <option key={i + 1} value={i + 1}>Grado {i + 1}</option>)}</select>
                 </div>
                 <div>
                   <label className="block text-xs text-[#00d4aa] uppercase font-bold mb-2">Grupo</label>
-                  <input type="text" name="grupo_estudiante" required placeholder="Ej. A" className="w-full bg-[#1a1d2e] border border-[#2a2d3e] rounded p-3 text-sm focus:border-[#00d4aa] outline-none" />
+                  <select aria-label="Grupo" name="grupo_estudiante" required defaultValue="" className="input-field"><option value="" disabled>Selecciona el grupo</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>Grupo {n}</option>)}</select>
                 </div>
               </div>
               
@@ -90,8 +90,8 @@ export default async function ConsentimientoPage({ searchParams }: { searchParam
                 con tarjeta de identidad <input type="text" name="tarjeta_identidad_estudiante" required placeholder="T.I." className="input-field inline-block w-40 mx-2 mt-2 text-[#e2e8f0]" />, 
                 de edad <input type="number" name="edad_estudiante" required placeholder="Edad" min="6" max="90" className="input-field inline-block w-20 mx-2 mt-2 text-[#e2e8f0]" /> años,
                 del municipio <input type="text" name="municipio_estudiante" required placeholder="Municipio" className="input-field inline-block w-48 mx-2 mt-2 text-[#e2e8f0]" /> 
-                y del grado <input type="text" name="grado_estudiante" required placeholder="Grado ej. 5°" className="input-field inline-block w-32 mx-2 mt-2 text-[#e2e8f0]" /> 
-                del grupo <input type="text" name="grupo_estudiante" required placeholder="Grupo ej. A" className="input-field inline-block w-32 mx-2 mt-2 text-[#e2e8f0]" />, 
+                y del grado <select aria-label="Grado" name="grado_estudiante" required defaultValue="" className="input-field"><option value="" disabled>Selecciona el grado</option>{Array.from({ length: 11 }, (_, i) => <option key={i + 1} value={i + 1}>Grado {i + 1}</option>)}</select>
+                del grupo <select aria-label="Grupo" name="grupo_estudiante" required defaultValue="" className="input-field"><option value="" disabled>Selecciona el grupo</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>Grupo {n}</option>)}</select>,
                 con fines pedagógicos para su investigación en neuro pedagogía y para el mejoramiento de la calidad educativa en su país Colombia, departamento de 
                 Antioquia y municipio de La Estrella, ubicación de la institución.
               </p>

@@ -33,3 +33,10 @@ next-env.d.ts
 Thumbs.db
 # Local development server logs
 next-dev*.log
+
+# Generated research reports and PDF review files
+output/pdf/
+tmp/pdfs/
+
+# Private school records supplied for research
+/doc/
